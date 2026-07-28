@@ -33,7 +33,7 @@ import fitz  # PyMuPDF
 import torch
 from PIL import Image
 from tqdm import tqdm
-from transformers import AutoModelForMultimodalLM, AutoProcessor
+from transformers import AutoConfig, AutoModelForMultimodalLM, AutoProcessor
 
 MODEL_ID = "Reza2kn/Bina-0.1"
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
@@ -79,10 +79,19 @@ def load_model(force_cpu=False, log=print):
     processor = AutoProcessor.from_pretrained(MODEL_ID)
     log(f"[INFO] Processor loaded in {time.time() - t0:.1f}s")
 
+    # Bina's config declares eos_token_id=248044, which is outside the vocab
+    # (65425). The tokenizer's <|im_end|> (=2) is the real EOS; patch the
+    # config so transformers doesn't warn and generation stops correctly.
+    cfg = AutoConfig.from_pretrained(MODEL_ID)
+    if cfg.text_config.eos_token_id is not None and cfg.text_config.eos_token_id >= cfg.text_config.vocab_size:
+        cfg.text_config.eos_token_id = processor.tokenizer.eos_token_id
+        log(f"[INFO] Fixed invalid eos_token_id ({cfg.text_config.eos_token_id}) in model config")
+
     log(f"[INFO] Loading model weights (dtype={dtype}, device_map={'auto' if device == 'cuda' else 'None'}) ...")
     t0 = time.time()
     model = AutoModelForMultimodalLM.from_pretrained(
         MODEL_ID,
+        config=cfg,
         dtype=dtype,
         device_map="auto" if device == "cuda" else None,
     )
