@@ -41,38 +41,64 @@ PROMPT_TEXT = "Transcribe all text in this image exactly as it appears."
 PDF_DPI = 300
 
 
-def load_model(force_cpu=False):
-    import time as _time
+def model_cache_info():
+    """Returns (is_cached, local_size_gb) for the model repo on disk."""
+    from huggingface_hub.constants import HF_HUB_CACHE
 
+    cache_dir = Path(HF_HUB_CACHE) / f"models--{MODEL_ID.replace('/', '--')}"
+    if not cache_dir.is_dir():
+        return False, None
+    total = sum(f.stat().st_size for f in cache_dir.rglob("*") if f.is_file())
+    return True, total / 1e9
+
+
+def repo_size_gb():
+    """Total download size (GB) of the model repo per the Hugging Face API."""
+    from huggingface_hub import HfApi
+
+    info = HfApi().model_info(MODEL_ID, files_metadata=True)
+    return sum(s.size or 0 for s in info.siblings) / 1e9
+
+
+def load_model(force_cpu=False, log=print):
     if force_cpu:
         device = "cpu"
     else:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.float16 if device == "cuda" else torch.float32
-    print(f"[DEBUG] Device: {device}, dtype: {dtype}")
+    log(f"[INFO] Device: {device}, dtype: {dtype}")
 
-    print(f"[DEBUG] Loading processor for {MODEL_ID} ...")
-    t0 = _time.time()
+    cached, size = model_cache_info()
+    if cached:
+        log(f"[INFO] Model found in local cache ({size:.1f} GB)")
+    else:
+        log("[INFO] Model not cached - will download on first load")
+
+    log(f"[INFO] Loading processor for {MODEL_ID} ...")
+    t0 = time.time()
     processor = AutoProcessor.from_pretrained(MODEL_ID)
-    print(f"[DEBUG] Processor loaded in {_time.time() - t0:.1f}s")
+    log(f"[INFO] Processor loaded in {time.time() - t0:.1f}s")
 
-    print(f"[DEBUG] Loading model weights (dtype={dtype}, device_map={'auto' if device == 'cuda' else 'None'}) ...")
-    t0 = _time.time()
+    log(f"[INFO] Loading model weights (dtype={dtype}, device_map={'auto' if device == 'cuda' else 'None'}) ...")
+    t0 = time.time()
     model = AutoModelForMultimodalLM.from_pretrained(
         MODEL_ID,
         dtype=dtype,
         device_map="auto" if device == "cuda" else None,
     )
-    print(f"[DEBUG] Model weights loaded in {_time.time() - t0:.1f}s")
+    log(f"[INFO] Model weights loaded in {time.time() - t0:.1f}s")
 
     if device == "cpu":
-        print(f"[DEBUG] Moving model to {device} ...")
-        t0 = _time.time()
+        log(f"[INFO] Moving model to {device} ...")
+        t0 = time.time()
         model = model.to(device)
-        print(f"[DEBUG] Model moved in {_time.time() - t0:.1f}s")
+        log(f"[INFO] Model moved in {time.time() - t0:.1f}s")
 
+    n_params = sum(p.numel() for p in model.parameters())
+    log(f"[INFO] Model ready: {n_params / 1e9:.2f}B parameters on {device}")
+    if cached:
+        log(f"[INFO] Model files on disk: {size:.1f} GB")
     model.eval()
-    print(f"[DEBUG] Model ready. Device: {device}")
     return processor, model, device
 
 
@@ -246,6 +272,14 @@ class OCRApp:
         self.log.see("end")
         self.log.configure(state="disabled")
 
+    def _ask_download(self, size_gb):
+        return messagebox.askyesno(
+            "Model not downloaded",
+            f"Model {MODEL_ID} is not cached locally.\n\n"
+            f"Download size: ~{size_gb:.1f} GB\n\n"
+            "Download it now?",
+        )
+
     # --- OCR worker ---
 
     def _start(self):
@@ -296,8 +330,17 @@ class OCRApp:
             self.root.after(0, lambda: self._log(f"Found {total} pages to process."))
 
             # Load model
+            cached, cache_size = model_cache_info()
+            if not cached:
+                size_gb = repo_size_gb()
+                self.root.after(0, lambda s=size_gb: self._log(f"[INFO] Model {MODEL_ID} is not downloaded yet (~{s:.1f} GB)."))
+                ask = self._ask_download(size_gb)
+                if not ask:
+                    self.root.after(0, lambda: self._log("Aborted - model not downloaded."))
+                    return
+
             self.root.after(0, lambda: self.status_label.configure(text="Loading model..."))
-            processor, model, device = load_model()
+            processor, model, device = load_model(log=lambda m: self.root.after(0, lambda s=m: self._log(s)))
 
             output_path = Path(self.output_file.get())
             timing_path = Path(self.timing_log.get())
@@ -426,6 +469,17 @@ def main():
 
     if args.limit:
         pages = pages[: args.limit]
+
+    cached, _ = model_cache_info()
+    if not cached:
+        print(f"[INFO] Model {MODEL_ID} is not downloaded yet (~{repo_size_gb():.1f} GB).")
+        try:
+            confirm = input("Download it now? [y/N] ")
+        except EOFError:
+            confirm = ""
+        if confirm.strip().lower() not in ("y", "yes"):
+            print("Aborted - model not downloaded.")
+            sys.exit(0)
 
     processor, model, device = load_model(force_cpu=args.cpu)
 
