@@ -38,7 +38,7 @@ from transformers import AutoConfig, AutoModelForMultimodalLM, AutoProcessor
 MODEL_ID = "Reza2kn/Bina-0.1"
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 PROMPT_TEXT = "Transcribe all text in this image exactly as it appears."
-PDF_DPI = 300
+PDF_DPI = 150
 
 
 def model_cache_info():
@@ -208,12 +208,17 @@ class OCRApp:
         opt_frame.pack(fill="x", padx=10, pady=4)
 
         ttk.Label(opt_frame, text="Max new tokens:").grid(row=0, column=0, sticky="w")
-        self.max_tokens = tk.IntVar(value=1024)
+        self.max_tokens = tk.IntVar(value=512)
         ttk.Spinbox(opt_frame, from_=64, to=4096, textvariable=self.max_tokens, width=8).grid(row=0, column=1, sticky="w", padx=(4, 16))
 
         ttk.Label(opt_frame, text="Page limit (0=all):").grid(row=0, column=2, sticky="w")
         self.page_limit = tk.IntVar(value=0)
         ttk.Spinbox(opt_frame, from_=0, to=99999, textvariable=self.page_limit, width=8).grid(row=0, column=3, sticky="w", padx=(4, 0))
+
+        ttk.Label(opt_frame, text="Device:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        self.device_var = tk.StringVar(value="cuda" if torch.cuda.is_available() else "cpu")
+        ttk.Radiobutton(opt_frame, text="GPU", variable=self.device_var, value="cuda").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="CPU", variable=self.device_var, value="cpu").grid(row=1, column=2, sticky="w", padx=(16, 0), pady=(6, 0))
 
         # --- Progress ---
         prog_frame = ttk.Frame(root, padding=8)
@@ -349,7 +354,10 @@ class OCRApp:
                     return
 
             self.root.after(0, lambda: self.status_label.configure(text="Loading model..."))
-            processor, model, device = load_model(log=lambda m: self.root.after(0, lambda s=m: self._log(s)))
+            processor, model, device = load_model(
+                force_cpu=self.device_var.get() == "cpu",
+                log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
+            )
 
             output_path = Path(self.output_file.get())
             timing_path = Path(self.timing_log.get())
