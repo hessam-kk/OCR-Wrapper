@@ -1,4 +1,5 @@
 *.csv
 *.pdf
+*.md
+!README.md
 __pycache__/
-
