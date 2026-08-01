@@ -13,14 +13,13 @@ Notes:
 - Designed for low-VRAM GPUs (e.g. 4GB laptop GPUs). Model is ~0.7B params.
 - Processes images in sorted filename order, so name pages like
   page_001.jpg, page_002.jpg, ... to keep book order correct.
-- PDF files are rendered page-by-page at 300 DPI for OCR.
+- PDF files are rendered page-by-page at 150 DPI for OCR.
 - Writes a running transcript + per-page timing log so you can gauge
   whether local inference is fast enough for a full book.
 """
 
 import argparse
 import csv
-import os
 import sys
 import tempfile
 import threading
@@ -160,6 +159,65 @@ def transcribe_page(processor, model, image_path: Path, max_new_tokens: int) -> 
     generated_ids = outputs[0][inputs["input_ids"].shape[-1]:]
     text = processor.decode(generated_ids, skip_special_tokens=True)
     return text.strip()
+
+
+def run_ocr_pages(processor, model, pages, output_path, timing_path, max_new_tokens,
+                  log=print, progress=None, should_stop=lambda: False):
+    """OCR each page, write the transcript, and save per-page timings.
+
+    log(msg) -> None      called for page results and the summary
+    progress(i, total, elapsed, name) -> None   called after each page
+    should_stop() -> bool checked before each page
+    """
+    timings = []
+    total_start = time.time()
+    total = len(pages)
+
+    with open(output_path, "w", encoding="utf-8") as out_f:
+        for i, page_path in enumerate(pages, start=1):
+            if should_stop():
+                log("Stopped by user.")
+                break
+
+            page_start = time.time()
+
+            try:
+                text = transcribe_page(processor, model, page_path, max_new_tokens)
+            except torch.cuda.OutOfMemoryError:
+                torch.cuda.empty_cache()
+                text = "[ERROR: out of memory, page skipped]"
+                log(f"  [OOM] {page_path.name}")
+            except Exception as e:
+                text = f"[ERROR: {e}]"
+                log(f"  [ERROR] {page_path.name}: {e}")
+
+            elapsed = time.time() - page_start
+            timings.append((page_path.name, round(elapsed, 2)))
+
+            out_f.write(f"## Page {i}: {page_path.name}\n\n{text}\n\n")
+            out_f.flush()
+
+            if i % 10 == 0:
+                torch.cuda.empty_cache()
+
+            log(f"[{i}/{total}] {page_path.name} - {elapsed:.2f}s")
+            if progress:
+                progress(i, total, elapsed, page_path.name)
+
+    total_elapsed = time.time() - total_start
+
+    with open(timing_path, "w", newline="", encoding="utf-8") as csv_f:
+        writer = csv.writer(csv_f)
+        writer.writerow(["page_file", "seconds"])
+        writer.writerows(timings)
+
+    avg_time = sum(t for _, t in timings) / len(timings)
+    log("\n--- Summary ---")
+    log(f"Pages processed: {len(timings)}")
+    log(f"Total time: {total_elapsed:.2f}s")
+    log(f"Average time/page: {avg_time:.2f}s")
+    log(f"Transcript saved to: {output_path}")
+    log(f"Timing log saved to: {timing_path}")
 
 
 class OCRApp:
@@ -369,67 +427,24 @@ class OCRApp:
             self.root.after(0, lambda: self.status_label.configure(text=f"Processing 0/{total} pages..."))
             self.root.after(0, lambda: self.progress.configure(maximum=total))
 
-            with open(output_path, "w", encoding="utf-8") as out_f:
-                for i, page_path in enumerate(pages, start=1):
-                    if not self.running:
-                        self.root.after(0, lambda: self._log("Stopped by user."))
-                        break
+            def on_progress(i, tot, elapsed, name):
+                self.progress.configure(value=i)
+                self.status_label.configure(text=f"Processing {i}/{tot} pages... ({elapsed:.1f}s)")
 
-                    page_start = time.time()
-
-                    try:
-                        text = transcribe_page(processor, model, page_path, max_tokens)
-                    except torch.cuda.OutOfMemoryError:
-                        torch.cuda.empty_cache()
-                        text = "[ERROR: out of memory, page skipped]"
-                        self.root.after(0, lambda p=page_path: self._log(f"  [OOM] {p.name}"))
-                    except Exception as e:
-                        text = f"[ERROR: {e}]"
-                        self.root.after(0, lambda p=page_path, err=e: self._log(f"  [ERROR] {p.name}: {err}"))
-
-                    elapsed = time.time() - page_start
-                    timings.append((page_path.name, round(elapsed, 2)))
-
-                    out_f.write(f"## Page {i}: {page_path.name}\n\n{text}\n\n")
-                    out_f.flush()
-
-                    if i % 10 == 0:
-                        torch.cuda.empty_cache()
-
-                    cur_i, cur_total, cur_elapsed = i, total, elapsed
-                    self.root.after(0, lambda idx=cur_i, tot=cur_total, el=cur_elapsed, name=page_path.name: (
-                        self.progress.configure(value=idx),
-                        self.status_label.configure(text=f"Processing {idx}/{tot} pages... ({el:.1f}s)"),
-                        self._log(f"[{idx}/{tot}] {name} - {el:.2f}s"),
-                    ))
-
-            total_elapsed = time.time() - total_start
+            run_ocr_pages(
+                processor, model, pages, output_path, timing_path, max_tokens,
+                log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
+                progress=lambda i, t, e, n: self.root.after(0, lambda: on_progress(i, t, e, n)),
+                should_stop=lambda: not self.running,
+            )
 
             if pdf_tmp_dir:
                 for f in pdf_tmp_dir.iterdir():
                     f.unlink()
                 pdf_tmp_dir.rmdir()
 
-            if timings:
-                with open(timing_path, "w", newline="", encoding="utf-8") as csv_f:
-                    writer = csv.writer(csv_f)
-                    writer.writerow(["page_file", "seconds"])
-                    writer.writerows(timings)
-
-                avg_time = sum(t for _, t in timings) / len(timings)
-                summary = (
-                    f"\n--- Summary ---\n"
-                    f"Pages processed: {len(timings)}\n"
-                    f"Total time: {total_elapsed:.2f}s\n"
-                    f"Average time/page: {avg_time:.2f}s\n"
-                    f"Transcript saved to: {output_path}\n"
-                    f"Timing log saved to: {timing_path}"
-                )
-                self.root.after(0, lambda s=summary: self._log(s))
-
             self.root.after(0, lambda: self.status_label.configure(text="Done"))
             self.root.after(0, lambda: self.progress.configure(value=total))
-            self.root.after(0, lambda: self._log("Complete."))
 
         except Exception as e:
             self.root.after(0, lambda err=e: (
@@ -500,49 +515,19 @@ def main():
 
     processor, model, device = load_model(force_cpu=args.cpu)
 
-    timings = []
-    total_start = time.time()
+    def show_progress(i, tot, elapsed, name):
+        tqdm.write(f"[{i}/{tot}] {name} - {elapsed:.2f}s")
 
-    with open(output_path, "w", encoding="utf-8") as out_f:
-        for i, page_path in enumerate(tqdm(pages, desc="OCR", unit="page"), start=1):
-            page_start = time.time()
-
-            try:
-                text = transcribe_page(processor, model, page_path, args.max_new_tokens)
-            except torch.cuda.OutOfMemoryError:
-                torch.cuda.empty_cache()
-                text = "[ERROR: out of memory, page skipped]"
-            except Exception as e:
-                text = f"[ERROR: {e}]"
-
-            elapsed = time.time() - page_start
-            timings.append((page_path.name, round(elapsed, 2)))
-
-            out_f.write(f"## Page {i}: {page_path.name}\n\n{text}\n\n")
-            out_f.flush()
-
-            if i % 10 == 0:
-                torch.cuda.empty_cache()
-
-    total_elapsed = time.time() - total_start
+    run_ocr_pages(
+        processor, model, pages, output_path, timing_path, args.max_new_tokens,
+        log=print,
+        progress=show_progress,
+    )
 
     if pdf_tmp_dir:
         for f in pdf_tmp_dir.iterdir():
             f.unlink()
         pdf_tmp_dir.rmdir()
-
-    with open(timing_path, "w", newline="", encoding="utf-8") as csv_f:
-        writer = csv.writer(csv_f)
-        writer.writerow(["page_file", "seconds"])
-        writer.writerows(timings)
-
-    avg_time = sum(t for _, t in timings) / len(timings)
-    print("\n--- Summary ---")
-    print(f"Pages processed: {len(pages)}")
-    print(f"Total time: {total_elapsed:.2f}s")
-    print(f"Average time/page: {avg_time:.2f}s")
-    print(f"Transcript saved to: {output_path}")
-    print(f"Timing log saved to: {timing_path}")
 
 
 if __name__ == "__main__":
