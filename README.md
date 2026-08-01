@@ -6,10 +6,9 @@ Batch OCR extraction using [Reza2kn/Bina-0.1](https://huggingface.co/Reza2kn/Bin
 
 - **PDF input** — renders pages at configurable DPI via PyMuPDF
 - **Image folder input** — processes sorted image files (jpg, png, webp, etc.)
-- **Tkinter GUI** — file pickers, progress bar, live log (launches by default with no args)
+- **Tkinter GUI** — file pickers, progress bar, live log, GPU/CPU selector (launches by default with no args)
 - **CLI mode** — for scripting and batch runs
-- **Kaggle notebook** — ready-to-run `.ipynb` with GPU support
-- **CPU fallback** — `--cpu` flag for machines without CUDA
+- **CPU fallback** — `--cpu` flag, or GPU/CPU selector in the GUI
 
 ## Requirements
 
@@ -57,18 +56,10 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 | `--input_dir` | — | Folder of page images |
 | `--output_file` | `book_transcript.md` | Transcript output path |
 | `--timing_log` | `page_timings.csv` | Per-page timing CSV |
-| `--max_new_tokens` | `1024` | Max tokens generated per page |
+| `--max_new_tokens` | `512` | Max tokens generated per page |
 | `--limit` | all | Process only first N pages |
 | `--cpu` | off | Force CPU even if GPU is available |
 | `--gui` | — | Launch GUI explicitly |
-
-### Kaggle
-
-1. Upload your PDF as a Kaggle Dataset
-2. Open `bina_ocr_kaggle.ipynb` in Kaggle
-3. Set GPU accelerator (Settings → GPU)
-4. Edit the `INPUT_PATH` config cell
-5. Run all cells, restart kernel after install cell
 
 ## Output
 
@@ -78,6 +69,6 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 ## Notes
 
 - Model is cached locally after first download (~1.3GB)
-- 300 DPI is default for PDF rendering; lower for faster processing
-- On CPU, expect ~4 min/page; on GPU (P100/T4), ~10-30s/page
+- 150 DPI is default for PDF rendering; raise for better accuracy, lower for speed
+- On MX150, expect minutes/page; on a proper GPU, ~10-30s/page
 - `torch.cuda.empty_cache()` runs every 10 pages for low-VRAM GPUs
