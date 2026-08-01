@@ -14,12 +14,11 @@ Notes:
 - Processes images in sorted filename order, so name pages like
   page_001.jpg, page_002.jpg, ... to keep book order correct.
 - PDF files are rendered page-by-page at 150 DPI for OCR.
-- Writes a running transcript + per-page timing log so you can gauge
-  whether local inference is fast enough for a full book.
+- Writes a running transcript so you can gauge whether local inference
+  is fast enough for a full book.
 """
 
 import argparse
-import csv
 import sys
 import tempfile
 import threading
@@ -161,9 +160,9 @@ def transcribe_page(processor, model, image_path: Path, max_new_tokens: int) -> 
     return text.strip()
 
 
-def run_ocr_pages(processor, model, pages, output_path, timing_path, max_new_tokens,
+def run_ocr_pages(processor, model, pages, output_path, max_new_tokens,
                   log=print, progress=None, should_stop=lambda: False):
-    """OCR each page, write the transcript, and save per-page timings.
+    """OCR each page and write the transcript.
 
     log(msg) -> None      called for page results and the summary
     progress(i, total, elapsed, name) -> None   called after each page
@@ -206,18 +205,11 @@ def run_ocr_pages(processor, model, pages, output_path, timing_path, max_new_tok
 
     total_elapsed = time.time() - total_start
 
-    with open(timing_path, "w", newline="", encoding="utf-8") as csv_f:
-        writer = csv.writer(csv_f)
-        writer.writerow(["page_file", "seconds"])
-        writer.writerows(timings)
-
-    avg_time = sum(t for _, t in timings) / len(timings)
     log("\n--- Summary ---")
     log(f"Pages processed: {len(timings)}")
     log(f"Total time: {total_elapsed:.2f}s")
-    log(f"Average time/page: {avg_time:.2f}s")
+    log(f"Average time/page: {sum(t for _, t in timings) / len(timings):.2f}s")
     log(f"Transcript saved to: {output_path}")
-    log(f"Timing log saved to: {timing_path}")
 
 
 class OCRApp:
@@ -254,11 +246,6 @@ class OCRApp:
         ttk.Entry(out_frame, textvariable=self.output_file, width=50).grid(row=0, column=1, sticky="ew", padx=(4, 4))
         ttk.Button(out_frame, text="Browse", command=self._browse_output).grid(row=0, column=2)
 
-        ttk.Label(out_frame, text="Timing log:").grid(row=1, column=0, sticky="w", pady=(4, 0))
-        self.timing_log = tk.StringVar(value="page_timings.csv")
-        ttk.Entry(out_frame, textvariable=self.timing_log, width=50).grid(row=1, column=1, sticky="ew", padx=(4, 4), pady=(4, 0))
-        ttk.Button(out_frame, text="Browse", command=self._browse_timing).grid(row=1, column=2, pady=(4, 0))
-
         out_frame.columnconfigure(1, weight=1)
 
         # --- Options ---
@@ -266,7 +253,7 @@ class OCRApp:
         opt_frame.pack(fill="x", padx=10, pady=4)
 
         ttk.Label(opt_frame, text="Max new tokens:").grid(row=0, column=0, sticky="w")
-        self.max_tokens = tk.IntVar(value=512)
+        self.max_tokens = tk.IntVar(value=1024)
         ttk.Spinbox(opt_frame, from_=64, to=4096, textvariable=self.max_tokens, width=8).grid(row=0, column=1, sticky="w", padx=(4, 16))
 
         ttk.Label(opt_frame, text="Page limit (0=all):").grid(row=0, column=2, sticky="w")
@@ -325,16 +312,6 @@ class OCRApp:
         )
         if path:
             self.output_file.set(path)
-
-    def _browse_timing(self):
-        path = filedialog.asksaveasfilename(
-            title="Save timing log as",
-            defaultextension=".csv",
-            initialfile=self.timing_log.get(),
-            filetypes=[("CSV", "*.csv"), ("All files", "*.*")],
-        )
-        if path:
-            self.timing_log.set(path)
 
     # --- Logging ---
 
@@ -418,11 +395,7 @@ class OCRApp:
             )
 
             output_path = Path(self.output_file.get())
-            timing_path = Path(self.timing_log.get())
             max_tokens = self.max_tokens.get()
-
-            timings = []
-            total_start = time.time()
 
             self.root.after(0, lambda: self.status_label.configure(text=f"Processing 0/{total} pages..."))
             self.root.after(0, lambda: self.progress.configure(maximum=total))
@@ -432,7 +405,7 @@ class OCRApp:
                 self.status_label.configure(text=f"Processing {i}/{tot} pages... ({elapsed:.1f}s)")
 
             run_ocr_pages(
-                processor, model, pages, output_path, timing_path, max_tokens,
+                processor, model, pages, output_path, max_tokens,
                 log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
                 progress=lambda i, t, e, n: self.root.after(0, lambda: on_progress(i, t, e, n)),
                 should_stop=lambda: not self.running,
@@ -465,7 +438,6 @@ def main():
     parser.add_argument("--input_dir", help="Folder containing page images")
     parser.add_argument("--pdf", help="Path to a PDF file")
     parser.add_argument("--output_file", default="book_transcript.md", help="Combined transcript output path")
-    parser.add_argument("--timing_log", default="page_timings.csv", help="Per-page timing CSV path")
     parser.add_argument("--max_new_tokens", type=int, default=1024, help="Max tokens generated per page")
     parser.add_argument("--limit", type=int, default=None, help="Only process the first N pages")
     parser.add_argument("--gui", action="store_true", help="Launch the GUI instead of CLI")
@@ -497,7 +469,6 @@ def main():
         pages = get_page_images(input_dir)
 
     output_path = Path(args.output_file)
-    timing_path = Path(args.timing_log)
 
     if args.limit:
         pages = pages[: args.limit]
@@ -519,7 +490,7 @@ def main():
         tqdm.write(f"[{i}/{tot}] {name} - {elapsed:.2f}s")
 
     run_ocr_pages(
-        processor, model, pages, output_path, timing_path, args.max_new_tokens,
+        processor, model, pages, output_path, args.max_new_tokens,
         log=print,
         progress=show_progress,
     )
