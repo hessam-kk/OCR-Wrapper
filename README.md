@@ -55,8 +55,7 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 | `--pdf` | — | Path to PDF file |
 | `--input_dir` | — | Folder of page images |
 | `--output_file` | `book_transcript.md` | Transcript output path |
-| `--timing_log` | `page_timings.csv` | Per-page timing CSV |
-| `--max_new_tokens` | `512` | Max tokens generated per page |
+| `--max_new_tokens` | `1024` | Max tokens generated per page |
 | `--limit` | all | Process only first N pages |
 | `--cpu` | off | Force CPU even if GPU is available |
 | `--gui` | — | Launch GUI explicitly |
@@ -64,7 +63,6 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 ## Output
 
 - **Transcript** — Markdown file with `## Page N: filename` sections
-- **Timing log** — CSV with per-page inference times
 
 ## Notes
 
