@@ -24,7 +24,7 @@ pip install -r requirements.txt
 > ```
 > pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 > ```
-> then `pip install -r requirements.txt`. The MX150 (sm_61) requires PyTorch 2.6+cu126 — newer PyTorch versions only support sm_75+.
+> then `pip install -r requirements.txt`.
 
 > **Note:** Bina-0.1 uses the `qwen3_5` architecture, which requires a recent transformers build. If model loading fails, install from source:
 > ```
@@ -95,6 +95,6 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 
 - Model is cached locally after first download (~1.3GB); the tool checks the cache and asks before downloading
 - 150 DPI is default for PDF rendering; raise for better accuracy, lower for speed
-- On MX150, expect minutes/page; on a proper GPU, ~10-30s/page
+- Expect minutes/page on low-end GPUs; ~10-30s/page on a proper GPU
 - `torch.cuda.empty_cache()` runs every 10 pages for low-VRAM GPUs
 - Stop button (GUI) / Ctrl-C (CLI) stops after the current page
