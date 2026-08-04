@@ -66,7 +66,13 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 
 - **Transcript** — Markdown file with `## Page N: filename` sections
 
+### GUI
+
+![Bina OCR GUI](ocr%20preview%201.png)
+
 ### Sample result (page 1 of «۱» , RTL Persian)
+
+![Sample OCR output](sample%20result%201.png)
 
 > ۱
 > همه غافلگیر شدند.
@@ -85,6 +91,8 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 > تحصیلات دانشگاهی.
 > راستش را بخواهید حتی دبیرستان را هم تمام نکرده.
 > سایهٔ پدر بر سرش نبوده و در شهر کوچک وانگانویی، بزرگ شده و
+
+> The screenshot above shows the rendered output — [full transcript](book_transcript.md).
 
 ## Notes
 
