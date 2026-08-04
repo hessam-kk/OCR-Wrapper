@@ -2,7 +2,7 @@
 
 Batch OCR extraction using [Reza2kn/Bina-0.1](https://huggingface.co/Reza2kn/Bina-0.1) — a Persian OCR vision-language model (~0.7B params).
 
-![Bina OCR GUI](ocr%20preview%201.png)
+![Bina OCR GUI](images/ocr%20preview%201.png)
 
 ## Features
 
@@ -69,7 +69,7 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 
 ### Sample result (page 1 of «۱» , RTL Persian)
 
-![Sample OCR output](sample%20result%201.png)
+![Sample OCR output](images/sample%20result%201.png)
 
 > ۱
 > همه غافلگیر شدند.
