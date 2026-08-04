@@ -1,0 +1,8 @@
+torch
+torchvision
+pymupdf
+transformers
+accelerate
+safetensors
+pillow
+tqdm
