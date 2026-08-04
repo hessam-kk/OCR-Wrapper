@@ -16,21 +16,20 @@ Batch OCR extraction using [Reza2kn/Bina-0.1](https://huggingface.co/Reza2kn/Bin
 
 ## Requirements
 
-```
-pip install torch torchvision pymupdf transformers accelerate safetensors pillow tqdm
+```bash
+pip install -r requirements.txt
 ```
 
-For GPU support, install PyTorch with CUDA:
-```
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
-```
+> **Note:** For GPU support, install PyTorch with CUDA first:
+> ```
+> pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+> ```
+> then `pip install -r requirements.txt`. The MX150 (sm_61) requires PyTorch 2.6+cu126 — newer PyTorch versions only support sm_75+.
 
 > **Note:** Bina-0.1 uses the `qwen3_5` architecture, which requires a recent transformers build. If model loading fails, install from source:
 > ```
 > pip install --force-reinstall git+https://github.com/huggingface/transformers.git
 > ```
-
-> **Note:** MX150 (sm_61) requires PyTorch 2.6+cu126. Newer PyTorch versions only support sm_75+.
 
 ## Usage
 
