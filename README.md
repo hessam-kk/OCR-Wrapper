@@ -9,6 +9,8 @@ Batch OCR extraction using [Reza2kn/Bina-0.1](https://huggingface.co/Reza2kn/Bin
 - **Tkinter GUI** — file pickers, progress bar, live log, GPU/CPU selector (launches by default with no args)
 - **CLI mode** — for scripting and batch runs
 - **CPU fallback** — `--cpu` flag, or GPU/CPU selector in the GUI
+- **Modular code** — split into `model.py`, `pages.py`, `ocr.py`, `gui.py` around the `book_ocr_batch.py` entry point
+- **Model check before download** — shows cache status and repo size, asks before downloading
 
 ## Requirements
 
@@ -64,9 +66,30 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 
 - **Transcript** — Markdown file with `## Page N: filename` sections
 
+### Sample result (page 1 of «۱» , RTL Persian)
+
+> ۱
+> همه غافلگیر شدند.
+> در سال ۲۰۰۵، جنی مک‌کورمیک با استفاده از تلسکوپ
+> بیست‌وپنج‌سانتی‌متری رصدخانهٔ فارم کاول، در اوکلند نیوزیلند
+> توانست سیاره‌ای ناشناخته را در منظومه‌ای کشف کند که پانزده هزار
+> سال نوری با زمین فاصله داشت. جنی چند سال بعدتر بازهم مایهٔ
+> شگفتی همه شد، چون یک سیارک! تازه کشف کرد و روی حساب
+> وطن‌پرستی اسمش را هم گذاشت نیوزیلند. از آن به بعد چیزی حدود
+> بیست مقالهٔ علمی را با همکاری دیگران نوشته که در مجلات
+> دانشگاهی و ازجمله نشریهٔ معتبر ساینس! منتشر شده و کار به جایی
+> رسیده که گیتس مک‌فادن، بازیگر مجموعهٔ تلویزیونی پیشتازان فضا،
+> وقتی او را در نمایشگاه قصه‌های علمی‌تخیلی دید، از او امضا گرفت.
+> این‌ها به کنار، شاید مهم‌ترین دستاورد جنی همانی باشد که کمتر
+> کسی می‌داند: او یکی از مهم‌ترین ستاره‌شناسان امروز دنیاست، بدون
+> تحصیلات دانشگاهی.
+> راستش را بخواهید حتی دبیرستان را هم تمام نکرده.
+> سایهٔ پدر بر سرش نبوده و در شهر کوچک وانگانویی، بزرگ شده و
+
 ## Notes
 
-- Model is cached locally after first download (~1.3GB)
+- Model is cached locally after first download (~1.3GB); the tool checks the cache and asks before downloading
 - 150 DPI is default for PDF rendering; raise for better accuracy, lower for speed
 - On MX150, expect minutes/page; on a proper GPU, ~10-30s/page
 - `torch.cuda.empty_cache()` runs every 10 pages for low-VRAM GPUs
+- Stop button (GUI) / Ctrl-C (CLI) stops after the current page
