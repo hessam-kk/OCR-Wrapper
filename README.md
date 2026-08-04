@@ -98,3 +98,7 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 - Expect minutes/page on low-end GPUs; ~10-30s/page on a proper GPU
 - `torch.cuda.empty_cache()` runs every 10 pages for low-VRAM GPUs
 - Stop button (GUI) / Ctrl-C (CLI) stops after the current page
+
+## License
+
+[MIT](LICENSE)
