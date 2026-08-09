@@ -6,7 +6,10 @@ from pathlib import Path
 import torch
 from transformers import AutoConfig, AutoModelForMultimodalLM, AutoProcessor
 
+from inspector import inspector_to_markdown
+
 MODEL_ID = "Reza2kn/Bina-0.1"
+ENGINES = ("bina", "inspector")
 
 
 def model_cache_info():
@@ -77,3 +80,20 @@ def load_model(force_cpu=False, log=print):
         log(f"[INFO] Model files on disk: {size:.1f} GB")
     model.eval()
     return processor, model, device
+
+
+def write_inspector_transcript(pdf_path: Path, output_path: Path, log=print):
+    """Fast text-based PDF extraction via pdf-inspector, written as a transcript."""
+    t0 = time.time()
+    log(f"[INFO] pdf-inspector: extracting text from {pdf_path.name} ...")
+    markdown = inspector_to_markdown(pdf_path)
+    elapsed = time.time() - t0
+
+    with open(output_path, "w", encoding="utf-8") as out_f:
+        out_f.write(f"## Page 1: {pdf_path.name}\n\n{markdown}\n\n")
+
+    log(f"[INFO] pdf-inspector finished in {elapsed:.2f}s")
+    log("\n--- Summary ---")
+    log(f"Pages processed: 1 (whole PDF)")
+    log(f"Total time: {elapsed:.2f}s")
+    log(f"Transcript saved to: {output_path}")
