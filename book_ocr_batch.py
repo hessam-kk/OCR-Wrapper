@@ -15,7 +15,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 from gui import OCRApp
-from model import MODEL_ID, load_model, model_cache_info, repo_size_gb
+from model import ENGINES, MODEL_ID, load_model, model_cache_info, repo_size_gb, write_inspector_transcript
 from ocr import run_ocr_pages
 from pages import get_page_images, get_pdf_images
 
@@ -27,6 +27,7 @@ def main():
     parser.add_argument("--output_file", default="book_transcript.md", help="Combined transcript output path")
     parser.add_argument("--max_new_tokens", type=int, default=1024, help="Max tokens generated per page")
     parser.add_argument("--limit", type=int, default=None, help="Only process the first N pages")
+    parser.add_argument("--engine", choices=ENGINES, default="bina", help="OCR engine to use (bina: vision model, inspector: fast text extraction, PDF only)")
     parser.add_argument("--gui", action="store_true", help="Launch the GUI instead of CLI")
     parser.add_argument("--cpu", action="store_true", help="Force CPU even if GPU is available")
     args = parser.parse_args()
@@ -42,6 +43,14 @@ def main():
         parser.error("Either --input_dir or --pdf is required.")
     if args.input_dir and args.pdf:
         parser.error("Use either --input_dir or --pdf, not both.")
+    if args.engine == "inspector" and not args.pdf:
+        parser.error("--engine inspector requires --pdf (pdf-inspector only processes PDFs).")
+
+    output_path = Path(args.output_file)
+
+    if args.engine == "inspector":
+        write_inspector_transcript(Path(args.pdf), output_path)
+        return
 
     pdf_tmp_dir = None
 
@@ -54,8 +63,6 @@ def main():
     else:
         input_dir = Path(args.input_dir)
         pages = get_page_images(input_dir)
-
-    output_path = Path(args.output_file)
 
     if args.limit:
         pages = pages[: args.limit]

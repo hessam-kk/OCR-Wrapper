@@ -8,7 +8,7 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 import torch
 
-from model import MODEL_ID, load_model, model_cache_info, repo_size_gb
+from model import MODEL_ID, load_model, model_cache_info, repo_size_gb, write_inspector_transcript
 from ocr import run_ocr_pages
 from pages import PDF_DPI, get_page_images, get_pdf_images
 
@@ -61,10 +61,15 @@ class OCRApp:
         self.page_limit = tk.IntVar(value=0)
         ttk.Spinbox(opt_frame, from_=0, to=99999, textvariable=self.page_limit, width=8).grid(row=0, column=3, sticky="w", padx=(4, 0))
 
-        ttk.Label(opt_frame, text="Device:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(opt_frame, text="Engine:").grid(row=1, column=0, sticky="w", pady=(6, 0))
+        self.engine_var = tk.StringVar(value="bina")
+        ttk.Radiobutton(opt_frame, text="Bina OCR", variable=self.engine_var, value="bina").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="pdf-inspector", variable=self.engine_var, value="inspector").grid(row=1, column=2, sticky="w", padx=(16, 0), pady=(6, 0))
+
+        ttk.Label(opt_frame, text="Device:").grid(row=2, column=0, sticky="w", pady=(6, 0))
         self.device_var = tk.StringVar(value="cuda" if torch.cuda.is_available() else "cpu")
-        ttk.Radiobutton(opt_frame, text="GPU", variable=self.device_var, value="cuda").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="CPU", variable=self.device_var, value="cpu").grid(row=1, column=2, sticky="w", padx=(16, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="GPU", variable=self.device_var, value="cuda").grid(row=2, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="CPU", variable=self.device_var, value="cpu").grid(row=2, column=2, sticky="w", padx=(16, 0), pady=(6, 0))
 
         # --- Progress ---
         prog_frame = ttk.Frame(root, padding=8)
@@ -156,6 +161,23 @@ class OCRApp:
         try:
             input_path = Path(self.input_path.get().strip())
             input_type = self.input_type.get()
+            engine = self.engine_var.get()
+
+            if engine == "inspector":
+                if input_type != "pdf":
+                    self.root.after(0, lambda: messagebox.showerror("Error", "pdf-inspector only processes PDF files. Pick a PDF or switch to Bina OCR."))
+                    return
+                if not input_path.is_file():
+                    self.root.after(0, lambda: messagebox.showerror("Error", f"PDF not found: {input_path}"))
+                    return
+                output_path = Path(self.output_file.get())
+                self.root.after(0, lambda: self.status_label.configure(text="Extracting text..."))
+                write_inspector_transcript(
+                    input_path, output_path,
+                    log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
+                )
+                self.root.after(0, lambda: self.status_label.configure(text="Done"))
+                return
 
             # Collect pages
             pdf_tmp_dir = None
