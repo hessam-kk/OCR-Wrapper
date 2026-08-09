@@ -63,8 +63,8 @@ class OCRApp:
 
         ttk.Label(opt_frame, text="Engine:").grid(row=1, column=0, sticky="w", pady=(6, 0))
         self.engine_var = tk.StringVar(value="bina")
-        ttk.Radiobutton(opt_frame, text="Bina OCR", variable=self.engine_var, value="bina").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="pdf-inspector", variable=self.engine_var, value="inspector").grid(row=1, column=2, sticky="w", padx=(16, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="Bina OCR (OCR)", variable=self.engine_var, value="bina").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="pdf-inspector (Parser)", variable=self.engine_var, value="inspector").grid(row=1, column=2, sticky="w", padx=(16, 0), pady=(6, 0))
 
         ttk.Label(opt_frame, text="Device:").grid(row=2, column=0, sticky="w", pady=(6, 0))
         self.device_var = tk.StringVar(value="cuda" if torch.cuda.is_available() else "cpu")
