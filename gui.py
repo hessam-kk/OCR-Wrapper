@@ -9,8 +9,9 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 import torch
 
 from model import MODEL_ID, load_model, model_cache_info, repo_size_gb, write_inspector_transcript
-from ocr import run_ocr_pages
+from ocr import run_ocr_pages, transcribe_page
 from pages import PDF_DPI, get_page_images, get_pdf_images
+from windows_ocr import get_ocr_engine, oneocr_transcribe_page
 
 
 class OCRApp:
@@ -65,6 +66,7 @@ class OCRApp:
         self.engine_var = tk.StringVar(value="bina")
         ttk.Radiobutton(opt_frame, text="Bina OCR (OCR)", variable=self.engine_var, value="bina").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
         ttk.Radiobutton(opt_frame, text="pdf-inspector (Parser)", variable=self.engine_var, value="inspector").grid(row=1, column=2, sticky="w", padx=(16, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="Windows OCR (oneocr)", variable=self.engine_var, value="oneocr").grid(row=1, column=3, sticky="w", padx=(16, 0), pady=(6, 0))
 
         ttk.Label(opt_frame, text="Device:").grid(row=2, column=0, sticky="w", pady=(6, 0))
         self.device_var = tk.StringVar(value="cuda" if torch.cuda.is_available() else "cpu")
@@ -201,24 +203,30 @@ class OCRApp:
             total = len(pages)
             self.root.after(0, lambda: self._log(f"Found {total} pages to process."))
 
-            # Load model
-            cached, cache_size = model_cache_info()
-            if not cached:
-                size_gb = repo_size_gb()
-                self.root.after(0, lambda s=size_gb: self._log(f"[INFO] Model {MODEL_ID} is not downloaded yet (~{s:.1f} GB)."))
-                ask = self._ask_download(size_gb)
-                if not ask:
-                    self.root.after(0, lambda: self._log("Aborted - model not downloaded."))
-                    return
-
-            self.root.after(0, lambda: self.status_label.configure(text="Loading model..."))
-            processor, model, device = load_model(
-                force_cpu=self.device_var.get() == "cpu",
-                log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
-            )
-
             output_path = Path(self.output_file.get())
-            max_tokens = self.max_tokens.get()
+
+            if engine == "oneocr":
+                self.root.after(0, lambda: self.status_label.configure(text="Loading Windows OCR engine..."))
+                ocr_engine = get_ocr_engine()
+                transcribe = lambda p: oneocr_transcribe_page(ocr_engine, p)
+            else:
+                # Load model
+                cached, cache_size = model_cache_info()
+                if not cached:
+                    size_gb = repo_size_gb()
+                    self.root.after(0, lambda s=size_gb: self._log(f"[INFO] Model {MODEL_ID} is not downloaded yet (~{s:.1f} GB)."))
+                    ask = self._ask_download(size_gb)
+                    if not ask:
+                        self.root.after(0, lambda: self._log("Aborted - model not downloaded."))
+                        return
+
+                self.root.after(0, lambda: self.status_label.configure(text="Loading model..."))
+                processor, model, device = load_model(
+                    force_cpu=self.device_var.get() == "cpu",
+                    log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
+                )
+                max_tokens = self.max_tokens.get()
+                transcribe = lambda p: transcribe_page(processor, model, p, max_tokens)
 
             self.root.after(0, lambda: self.status_label.configure(text=f"Processing 0/{total} pages..."))
             self.root.after(0, lambda: self.progress.configure(maximum=total))
@@ -228,7 +236,7 @@ class OCRApp:
                 self.status_label.configure(text=f"Processing {i}/{tot} pages... ({elapsed:.1f}s)")
 
             run_ocr_pages(
-                processor, model, pages, output_path, max_tokens,
+                transcribe, pages, output_path,
                 log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
                 progress=lambda i, t, e, n: self.root.after(0, lambda: on_progress(i, t, e, n)),
                 should_stop=lambda: not self.running,

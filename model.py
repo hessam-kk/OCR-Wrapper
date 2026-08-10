@@ -9,7 +9,7 @@ from transformers import AutoConfig, AutoModelForMultimodalLM, AutoProcessor
 from inspector import inspector_to_markdown
 
 MODEL_ID = "Reza2kn/Bina-0.1"
-ENGINES = ("bina", "inspector")
+ENGINES = ("bina", "inspector", "oneocr")
 
 
 def model_cache_info():
