@@ -18,6 +18,7 @@ from gui import OCRApp
 from model import ENGINES, MODEL_ID, load_model, model_cache_info, repo_size_gb, write_inspector_transcript
 from ocr import run_ocr_pages, transcribe_page
 from pages import get_page_images, get_pdf_images
+from normalize import get_normalizer, normalize_transcribe
 from windows_ocr import get_ocr_engine, oneocr_transcribe_page
 
 
@@ -31,6 +32,7 @@ def main():
     parser.add_argument("--engine", choices=ENGINES, default="bina", help="OCR engine to use (bina: vision model, inspector: fast text extraction, PDF only, oneocr: Windows Snipping Tool OCR)")
     parser.add_argument("--gui", action="store_true", help="Launch the GUI instead of CLI")
     parser.add_argument("--cpu", action="store_true", help="Force CPU even if GPU is available")
+    parser.add_argument("--normalize", action="store_true", help="Normalize Persian text with hazm (reinserts half-spaces/ZWNJ)")
     args = parser.parse_args()
 
     # Launch GUI if --gui or no CLI args provided
@@ -85,6 +87,10 @@ def main():
     else:
         processor, model, device = load_model(force_cpu=args.cpu)
         transcribe = lambda p: transcribe_page(processor, model, p, args.max_new_tokens)
+
+    if args.normalize:
+        transcribe = normalize_transcribe(transcribe, get_normalizer())
+        print("[INFO] Persian normalization enabled (hazm)")
 
     def show_progress(i, tot, elapsed, name):
         tqdm.write(f"[{i}/{tot}] {name} - {elapsed:.2f}s")

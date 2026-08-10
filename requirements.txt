@@ -8,3 +8,4 @@ pillow
 tqdm
 pdf-inspector
 oneocr
+hazm
