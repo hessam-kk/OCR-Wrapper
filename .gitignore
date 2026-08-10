@@ -1,4 +1,7 @@
 *.pdf
 *.md
 !README.md
+*.azw3
+*.epub
+*.txt
 __pycache__/
