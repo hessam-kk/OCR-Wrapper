@@ -19,7 +19,7 @@ class OCRApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Bina OCR Batch")
-        self.root.geometry("720x620")
+        self.root.geometry("760x700")
         self.root.resizable(True, True)
 
         self.running = False
