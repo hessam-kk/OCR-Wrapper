@@ -55,7 +55,10 @@ def run_ocr_pages(transcribe, pages, output_base, formats,
     texts = []
     timings = []
     total_start = time.time()
-    total = len(pages)
+    try:
+        total = len(pages)
+    except TypeError:
+        total = None  # lazy iterator (PDF pages render on demand)
 
     for i, page_path in enumerate(pages, start=1):
         if should_stop():
@@ -81,9 +84,9 @@ def run_ocr_pages(transcribe, pages, output_base, formats,
         if i % 10 == 0:
             torch.cuda.empty_cache()
 
-        log(f"[{i}/{total}] {page_path.name} - {elapsed:.2f}s")
+        log(f"[{i}/{total or '?'}] {page_path.name} - {elapsed:.2f}s")
         if progress:
-            progress(i, total, elapsed, page_path.name)
+            progress(i, total or 0, elapsed, page_path.name)
 
     total_elapsed = time.time() - total_start
 
@@ -137,7 +140,9 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
         ebook_md_path = output_base.with_suffix(".ebook.md")
         ebook_md_path.write_text(ebook_body, encoding="utf-8")
         epub_path = output_base.with_suffix(".epub")
-        _convert(ebook_md_path, epub_path, log, "--title", title)
+        # --flow-size 0 disables size-based splitting; calibre's splitter
+        # fails on large single-block markdown (SplitError) otherwise.
+        _convert(ebook_md_path, epub_path, log, "--title", title, "--flow-size", "0")
 
     if "pdf" in requested:
         _convert(epub_path, output_base.with_suffix(".pdf"), log,

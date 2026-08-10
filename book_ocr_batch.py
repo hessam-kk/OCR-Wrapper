@@ -7,6 +7,7 @@ Usage:
 """
 
 import argparse
+import itertools
 import sys
 import tempfile
 import tkinter as tk
@@ -59,19 +60,26 @@ def main():
         return
 
     pdf_tmp_dir = None
+    total_pages = None
 
     if args.pdf:
         pdf_path = Path(args.pdf)
         if not pdf_path.is_file():
             parser.error(f"PDF file not found: {pdf_path}")
         pdf_tmp_dir = Path(tempfile.mkdtemp(prefix="ocr_pdf_"))
-        pages = get_pdf_images(pdf_path, pdf_tmp_dir)
+        pages, total_pages = get_pdf_images(pdf_path, pdf_tmp_dir)
+        if args.limit:
+            pages = itertools.islice(pages, args.limit)
+            total_pages = min(total_pages, args.limit)
     else:
         input_dir = Path(args.input_dir)
         pages = get_page_images(input_dir)
+        total_pages = len(pages)
+        if args.limit:
+            pages = pages[: args.limit]
+            total_pages = len(pages)
 
-    if args.limit:
-        pages = pages[: args.limit]
+    print(f"[INFO] Found {total_pages} pages to process.")
 
     cached, _ = model_cache_info()
     if not cached:
