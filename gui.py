@@ -220,6 +220,7 @@ class OCRApp:
 
             # Collect pages
             pdf_tmp_dir = None
+            limit = self.page_limit.get()
             if input_type == "pdf":
                 if not input_path.is_file():
                     self.root.after(0, lambda: messagebox.showerror("Error", f"PDF not found: {input_path}"))
@@ -290,6 +291,7 @@ class OCRApp:
             run_ocr_pages(
                 transcribe, pages, output_base, formats,
                 direction=self.direction_var.get(),
+                total=total,
                 log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
                 progress=lambda i, t, e, n: self.root.after(0, lambda: on_progress(i, t, e, n)),
                 should_stop=lambda: not self.running,

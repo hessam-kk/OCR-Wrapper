@@ -42,12 +42,15 @@ def transcribe_page(processor, model, image_path: Path, max_new_tokens: int) -> 
 
 
 def run_ocr_pages(transcribe, pages, output_base, formats,
-                  direction="rtl", log=print, progress=None, should_stop=lambda: False):
+                  direction="rtl", total=None, log=print, progress=None,
+                  should_stop=lambda: False):
     """OCR each page and export the transcript in the requested formats.
 
     transcribe(page_path) -> str     engine-specific page transcription
     output_base            path without extension
     formats                subset of FORMATS
+    total                  known page count (None if unknown; derived from
+                           len(pages) when possible)
     log(msg) -> None       called for page results and the summary
     progress(i, total, elapsed, name) -> None   called after each page
     should_stop() -> bool checked before each page
@@ -55,10 +58,11 @@ def run_ocr_pages(transcribe, pages, output_base, formats,
     texts = []
     timings = []
     total_start = time.time()
-    try:
-        total = len(pages)
-    except TypeError:
-        total = None  # lazy iterator (PDF pages render on demand)
+    if total is None:
+        try:
+            total = len(pages)
+        except TypeError:
+            total = None  # lazy iterator (PDF pages render on demand)
 
     for i, page_path in enumerate(pages, start=1):
         if should_stop():

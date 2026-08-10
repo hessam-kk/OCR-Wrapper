@@ -112,6 +112,7 @@ def main():
     run_ocr_pages(
         transcribe, pages, output_base, args.formats,
         direction=args.direction,
+        total=total_pages,
         log=print,
         progress=show_progress,
     )
