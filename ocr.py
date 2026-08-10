@@ -72,7 +72,7 @@ def run_ocr_pages(transcribe, pages, output_path,
             elapsed = time.time() - page_start
             timings.append((page_path.name, round(elapsed, 2)))
 
-            out_f.write(f"## Page {i}: {page_path.name}\n\n{text}\n\n")
+            out_f.write(f"{text}\n")
             out_f.flush()
 
             if i % 10 == 0:
