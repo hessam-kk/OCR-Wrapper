@@ -34,6 +34,7 @@ def main():
     parser.add_argument("--gui", action="store_true", help="Launch the GUI instead of CLI")
     parser.add_argument("--cpu", action="store_true", help="Force CPU even if GPU is available")
     parser.add_argument("--normalize", action="store_true", help="Normalize Persian text with hazm (reinserts half-spaces/ZWNJ)")
+    parser.add_argument("--direction", choices=("rtl", "ltr"), default="rtl", help="Text direction of the exported markdown")
     args = parser.parse_args()
 
     # Launch GUI if --gui or no CLI args provided
@@ -53,7 +54,7 @@ def main():
     output_base = Path(args.output_file)
 
     if args.engine == "inspector":
-        write_inspector_transcript(Path(args.pdf), output_base, args.formats)
+        write_inspector_transcript(Path(args.pdf), output_base, args.formats, args.direction)
         return
 
     pdf_tmp_dir = None
@@ -98,6 +99,7 @@ def main():
 
     run_ocr_pages(
         transcribe, pages, output_base, args.formats,
+        direction=args.direction,
         log=print,
         progress=show_progress,
     )

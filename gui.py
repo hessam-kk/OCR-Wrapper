@@ -200,7 +200,7 @@ class OCRApp:
                 formats = [f for f, v in self.format_vars.items() if v.get()]
                 self.root.after(0, lambda: self.status_label.configure(text="Extracting text..."))
                 write_inspector_transcript(
-                    input_path, output_base, formats,
+                    input_path, output_base, formats, self.direction_var.get(),
                     log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
                 )
                 self.root.after(0, lambda: self.status_label.configure(text="Done"))
@@ -271,6 +271,7 @@ class OCRApp:
 
             run_ocr_pages(
                 transcribe, pages, output_base, formats,
+                direction=self.direction_var.get(),
                 log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
                 progress=lambda i, t, e, n: self.root.after(0, lambda: on_progress(i, t, e, n)),
                 should_stop=lambda: not self.running,

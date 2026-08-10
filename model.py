@@ -83,14 +83,14 @@ def load_model(force_cpu=False, log=print):
     return processor, model, device
 
 
-def write_inspector_transcript(pdf_path: Path, output_base: Path, formats, log=print):
+def write_inspector_transcript(pdf_path: Path, output_base: Path, formats, direction="rtl", log=print):
     """Fast text-based PDF extraction via pdf-inspector, exported in the requested formats."""
     t0 = time.time()
     log(f"[INFO] pdf-inspector: extracting text from {pdf_path.name} ...")
     markdown = inspector_to_markdown(pdf_path)
     elapsed = time.time() - t0
 
-    write_outputs([markdown], output_base, formats, log)
+    write_outputs([markdown], output_base, formats, log, direction)
 
     log(f"[INFO] pdf-inspector finished in {elapsed:.2f}s")
     log("\n--- Summary ---")

@@ -42,7 +42,7 @@ def transcribe_page(processor, model, image_path: Path, max_new_tokens: int) -> 
 
 
 def run_ocr_pages(transcribe, pages, output_base, formats,
-                  log=print, progress=None, should_stop=lambda: False):
+                  direction="rtl", log=print, progress=None, should_stop=lambda: False):
     """OCR each page and export the transcript in the requested formats.
 
     transcribe(page_path) -> str     engine-specific page transcription
@@ -87,7 +87,7 @@ def run_ocr_pages(transcribe, pages, output_base, formats,
 
     total_elapsed = time.time() - total_start
 
-    write_outputs(texts, output_base, formats, log)
+    write_outputs(texts, output_base, formats, log, direction)
 
     log("\n--- Summary ---")
     log(f"Pages processed: {len(timings)}")
@@ -95,15 +95,18 @@ def run_ocr_pages(transcribe, pages, output_base, formats,
     log(f"Average time/page: {sum(t for _, t in timings) / len(timings):.2f}s")
 
 
-def write_outputs(texts, output_base, formats, log=print):
+def write_outputs(texts, output_base, formats, log=print, direction="rtl"):
     """Write the transcript body in each requested format.
 
     md/txt are written directly; epub/pdf/azw3 go through calibre
     (ebook-convert), chaining md -> epub -> pdf/azw3. pdf/azw3 need the
     epub, and epub needs the md, so intermediates are written as needed.
+    direction ("rtl"/"ltr") marks the md body direction for renderers.
     """
     formats = [f for f in formats if f in FORMATS]
     body = "\n\n".join(texts).strip() + "\n"
+    if direction == "rtl":
+        body = '<div dir="rtl">\n\n' + body + "</div>\n"
     output_base = Path(output_base)
     requested = set(formats)
 
