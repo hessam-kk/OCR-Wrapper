@@ -18,11 +18,11 @@ def get_page_images(input_dir: Path):
     return pages
 
 
-def get_pdf_images(pdf_path: Path, tmp_dir: Path):
+def get_pdf_images(pdf_path: Path, tmp_dir: Path, dpi: int = PDF_DPI):
     doc = fitz.open(pdf_path)
     pages = []
     for i, page in enumerate(doc):
-        pix = page.get_pixmap(dpi=PDF_DPI)
+        pix = page.get_pixmap(dpi=dpi)
         out = tmp_dir / f"page_{i + 1:04d}.png"
         pix.save(out)
         pages.append(out)

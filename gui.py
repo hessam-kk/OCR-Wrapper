@@ -19,7 +19,7 @@ class OCRApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Bina OCR Batch")
-        self.root.geometry("760x700")
+        self.root.geometry("820x700")
         self.root.resizable(True, True)
 
         self.running = False
@@ -66,25 +66,34 @@ class OCRApp:
 
         ttk.Label(opt_frame, text="Max new tokens:").grid(row=0, column=0, sticky="w")
         self.max_tokens = tk.IntVar(value=1024)
-        ttk.Spinbox(opt_frame, from_=64, to=4096, textvariable=self.max_tokens, width=8).grid(row=0, column=1, sticky="w", padx=(4, 16))
+        ttk.Spinbox(opt_frame, from_=64, to=4096, textvariable=self.max_tokens, width=8).grid(row=0, column=1, sticky="w", padx=(4, 8))
 
         ttk.Label(opt_frame, text="Page limit (0=all):").grid(row=0, column=2, sticky="w")
         self.page_limit = tk.IntVar(value=0)
         ttk.Spinbox(opt_frame, from_=0, to=99999, textvariable=self.page_limit, width=8).grid(row=0, column=3, sticky="w", padx=(4, 0))
 
+        ttk.Label(opt_frame, text="DPI:").grid(row=0, column=4, sticky="w", padx=(8, 0))
+        self.dpi_var = tk.StringVar(value=str(PDF_DPI))
+        ttk.Combobox(opt_frame, textvariable=self.dpi_var, values=["150", "200", "300", "400"], width=5, state="readonly").grid(row=0, column=5, sticky="w", padx=(4, 0))
+
         ttk.Label(opt_frame, text="Engine:").grid(row=1, column=0, sticky="w", pady=(6, 0))
         self.engine_var = tk.StringVar(value="oneocr")
         ttk.Radiobutton(opt_frame, text="Windows OCR (oneocr) - fastest, recommended", variable=self.engine_var, value="oneocr").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="Bina OCR (OCR)", variable=self.engine_var, value="bina").grid(row=1, column=2, sticky="w", padx=(16, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="pdf-inspector (Parser)", variable=self.engine_var, value="inspector").grid(row=1, column=3, sticky="w", padx=(16, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="Bina OCR (OCR)", variable=self.engine_var, value="bina").grid(row=1, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="pdf-inspector (Parser)", variable=self.engine_var, value="inspector").grid(row=1, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
 
         ttk.Label(opt_frame, text="Device:").grid(row=2, column=0, sticky="w", pady=(6, 0))
         self.device_var = tk.StringVar(value="cuda" if torch.cuda.is_available() else "cpu")
         ttk.Radiobutton(opt_frame, text="GPU", variable=self.device_var, value="cuda").grid(row=2, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="CPU", variable=self.device_var, value="cpu").grid(row=2, column=2, sticky="w", padx=(16, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="CPU", variable=self.device_var, value="cpu").grid(row=2, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
 
         self.normalize_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(opt_frame, text="Normalize Persian (half-spaces)", variable=self.normalize_var).grid(row=3, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        ttk.Checkbutton(opt_frame, text="Normalize Persian (half-spaces)", variable=self.normalize_var).grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 0))
+
+        ttk.Label(opt_frame, text="Direction:").grid(row=3, column=3, sticky="w", pady=(6, 0))
+        self.direction_var = tk.StringVar(value="rtl")
+        ttk.Radiobutton(opt_frame, text="RTL", variable=self.direction_var, value="rtl").grid(row=3, column=4, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="LTR", variable=self.direction_var, value="ltr").grid(row=3, column=5, sticky="w", padx=(4, 0), pady=(6, 0))
 
         # --- Progress ---
         prog_frame = ttk.Frame(root, padding=8)
@@ -204,8 +213,9 @@ class OCRApp:
                     self.root.after(0, lambda: messagebox.showerror("Error", f"PDF not found: {input_path}"))
                     return
                 pdf_tmp_dir = Path(tempfile.mkdtemp(prefix="ocr_pdf_"))
-                self.root.after(0, lambda: self._log(f"Rendering PDF pages at {PDF_DPI} DPI..."))
-                pages = get_pdf_images(input_path, pdf_tmp_dir)
+                dpi = int(self.dpi_var.get())
+                self.root.after(0, lambda: self._log(f"Rendering PDF pages at {dpi} DPI..."))
+                pages = get_pdf_images(input_path, pdf_tmp_dir, dpi)
             else:
                 if not input_path.is_dir():
                     self.root.after(0, lambda: messagebox.showerror("Error", f"Folder not found: {input_path}"))
