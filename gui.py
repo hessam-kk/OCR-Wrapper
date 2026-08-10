@@ -81,7 +81,7 @@ class OCRApp:
         ttk.Spinbox(opt_frame, from_=0, to=99999, textvariable=self.page_limit, width=8).grid(row=0, column=3, sticky="w", padx=(4, 0))
 
         ttk.Label(opt_frame, text="DPI:").grid(row=0, column=4, sticky="w", padx=(8, 0))
-        self.dpi_var = tk.StringVar(value=str(PDF_DPI))
+        self.dpi_var = tk.StringVar(value="300")
         ttk.Combobox(opt_frame, textvariable=self.dpi_var, values=["150", "200", "300", "400"], width=5, state="readonly").grid(row=0, column=5, sticky="w", padx=(4, 0))
 
         ttk.Label(opt_frame, text="Engine:").grid(row=1, column=0, sticky="w", pady=(6, 0))
@@ -97,16 +97,16 @@ class OCRApp:
         ttk.Radiobutton(opt_frame, text="CPU", variable=self.device_var, value="cpu").grid(row=2, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
 
         self.normalize_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(opt_frame, text="Normalize Persian (half-spaces)", variable=self.normalize_var).grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        ttk.Checkbutton(opt_frame, text="Normalize", variable=self.normalize_var).grid(row=3, column=0, sticky="w", pady=(6, 0))
 
-        ttk.Label(opt_frame, text="Workers:").grid(row=3, column=3, sticky="w", pady=(6, 0))
+        ttk.Label(opt_frame, text="Workers:").grid(row=3, column=1, sticky="w", padx=(8, 0), pady=(6, 0))
         self.workers_var = tk.IntVar(value=1)
-        ttk.Spinbox(opt_frame, from_=1, to=8, textvariable=self.workers_var, width=4).grid(row=3, column=4, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Spinbox(opt_frame, from_=1, to=8, textvariable=self.workers_var, width=3).grid(row=3, column=2, sticky="w", padx=(4, 0), pady=(6, 0))
 
-        ttk.Label(opt_frame, text="Direction:").grid(row=3, column=5, sticky="w", padx=(8, 0), pady=(6, 0))
+        ttk.Label(opt_frame, text="Dir:").grid(row=3, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
         self.direction_var = tk.StringVar(value="rtl")
-        ttk.Radiobutton(opt_frame, text="RTL", variable=self.direction_var, value="rtl").grid(row=3, column=6, sticky="w", padx=(4, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="LTR", variable=self.direction_var, value="ltr").grid(row=3, column=7, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="RTL", variable=self.direction_var, value="rtl").grid(row=3, column=4, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="LTR", variable=self.direction_var, value="ltr").grid(row=3, column=5, sticky="w", padx=(2, 0), pady=(6, 0))
 
         # --- Progress ---
         prog_frame = ttk.Frame(root, padding=8)

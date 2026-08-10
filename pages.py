@@ -5,7 +5,7 @@ from pathlib import Path
 import fitz  # PyMuPDF
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
-PDF_DPI = 150
+PDF_DPI = 300
 
 
 def get_page_images(input_dir: Path):
