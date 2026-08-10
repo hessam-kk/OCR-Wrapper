@@ -10,7 +10,7 @@ import torch
 
 from model import MODEL_ID, load_model, model_cache_info, repo_size_gb, write_inspector_transcript
 from normalize import get_normalizer, normalize_transcribe
-from ocr import run_ocr_pages, transcribe_page
+from ocr import FORMATS, run_ocr_pages, transcribe_page
 from pages import PDF_DPI, get_page_images, get_pdf_images
 from windows_ocr import get_ocr_engine, oneocr_transcribe_page
 
@@ -45,9 +45,18 @@ class OCRApp:
         out_frame.pack(fill="x", padx=10, pady=4)
 
         ttk.Label(out_frame, text="Transcript:").grid(row=0, column=0, sticky="w")
-        self.output_file = tk.StringVar(value="book_transcript.md")
+        self.output_file = tk.StringVar(value="book_transcript")
         ttk.Entry(out_frame, textvariable=self.output_file, width=50).grid(row=0, column=1, sticky="ew", padx=(4, 4))
         ttk.Button(out_frame, text="Browse", command=self._browse_output).grid(row=0, column=2)
+
+        ttk.Label(out_frame, text="Formats:").grid(row=1, column=0, sticky="w", pady=(4, 0))
+        self.format_vars = {}
+        fmt_frame = ttk.Frame(out_frame)
+        fmt_frame.grid(row=1, column=1, columnspan=2, sticky="w", padx=(4, 0), pady=(4, 0))
+        for col, fmt in enumerate(FORMATS):
+            var = tk.BooleanVar(value=fmt == "md")
+            self.format_vars[fmt] = var
+            ttk.Checkbutton(fmt_frame, text=fmt, variable=var).grid(row=0, column=col, sticky="w", padx=(0, 12))
 
         out_frame.columnconfigure(1, weight=1)
 
@@ -115,7 +124,7 @@ class OCRApp:
         if path:
             self.input_path.set(path)
             if self.input_type.get() == "pdf":
-                self.output_file.set(Path(path).stem + "_transcript.md")
+                self.output_file.set(Path(path).stem + "_transcript")
 
     def _browse_output(self):
         path = filedialog.asksaveasfilename(
@@ -125,7 +134,7 @@ class OCRApp:
             filetypes=[("Markdown", "*.md"), ("Text", "*.txt"), ("All files", "*.*")],
         )
         if path:
-            self.output_file.set(path)
+            self.output_file.set(Path(path).stem)
 
     # --- Logging ---
 
@@ -178,10 +187,11 @@ class OCRApp:
                 if not input_path.is_file():
                     self.root.after(0, lambda: messagebox.showerror("Error", f"PDF not found: {input_path}"))
                     return
-                output_path = Path(self.output_file.get())
+                output_base = Path(self.output_file.get())
+                formats = [f for f, v in self.format_vars.items() if v.get()]
                 self.root.after(0, lambda: self.status_label.configure(text="Extracting text..."))
                 write_inspector_transcript(
-                    input_path, output_path,
+                    input_path, output_base, formats,
                     log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
                 )
                 self.root.after(0, lambda: self.status_label.configure(text="Done"))
@@ -209,7 +219,8 @@ class OCRApp:
             total = len(pages)
             self.root.after(0, lambda: self._log(f"Found {total} pages to process."))
 
-            output_path = Path(self.output_file.get())
+            output_base = Path(self.output_file.get())
+            formats = [f for f, v in self.format_vars.items() if v.get()]
 
             if self.normalize_var.get():
                 normalizer = get_normalizer()
@@ -249,7 +260,7 @@ class OCRApp:
                 self.status_label.configure(text=f"Processing {i}/{tot} pages... ({elapsed:.1f}s)")
 
             run_ocr_pages(
-                transcribe, pages, output_path,
+                transcribe, pages, output_base, formats,
                 log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
                 progress=lambda i, t, e, n: self.root.after(0, lambda: on_progress(i, t, e, n)),
                 should_stop=lambda: not self.running,

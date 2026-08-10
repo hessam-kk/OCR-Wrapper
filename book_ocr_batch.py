@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from gui import OCRApp
 from model import ENGINES, MODEL_ID, load_model, model_cache_info, repo_size_gb, write_inspector_transcript
-from ocr import run_ocr_pages, transcribe_page
+from ocr import FORMATS, run_ocr_pages, transcribe_page
 from pages import get_page_images, get_pdf_images
 from normalize import get_normalizer, normalize_transcribe
 from windows_ocr import get_ocr_engine, oneocr_transcribe_page
@@ -26,7 +26,8 @@ def main():
     parser = argparse.ArgumentParser(description="Batch OCR a folder of book page images or a PDF file.")
     parser.add_argument("--input_dir", help="Folder containing page images")
     parser.add_argument("--pdf", help="Path to a PDF file")
-    parser.add_argument("--output_file", default="book_transcript.md", help="Combined transcript output path")
+    parser.add_argument("--output_file", default="book_transcript", help="Transcript output base name (extension added per format)")
+    parser.add_argument("--formats", nargs="+", choices=FORMATS, default=["md"], help="Output formats to write (md txt epub pdf azw3; epub/pdf/azw3 need calibre)")
     parser.add_argument("--max_new_tokens", type=int, default=1024, help="Max tokens generated per page")
     parser.add_argument("--limit", type=int, default=None, help="Only process the first N pages")
     parser.add_argument("--engine", choices=ENGINES, default="bina", help="OCR engine to use (bina: vision model, inspector: fast text extraction, PDF only, oneocr: Windows Snipping Tool OCR)")
@@ -49,10 +50,10 @@ def main():
     if args.engine == "inspector" and not args.pdf:
         parser.error("--engine inspector requires --pdf (pdf-inspector only processes PDFs).")
 
-    output_path = Path(args.output_file)
+    output_base = Path(args.output_file)
 
     if args.engine == "inspector":
-        write_inspector_transcript(Path(args.pdf), output_path)
+        write_inspector_transcript(Path(args.pdf), output_base, args.formats)
         return
 
     pdf_tmp_dir = None
@@ -96,7 +97,7 @@ def main():
         tqdm.write(f"[{i}/{tot}] {name} - {elapsed:.2f}s")
 
     run_ocr_pages(
-        transcribe, pages, output_path,
+        transcribe, pages, output_base, args.formats,
         log=print,
         progress=show_progress,
     )
