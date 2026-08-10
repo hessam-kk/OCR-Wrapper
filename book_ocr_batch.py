@@ -19,6 +19,7 @@ from model import ENGINES, MODEL_ID, load_model, model_cache_info, repo_size_gb,
 from ocr import FORMATS, run_ocr_pages, transcribe_page
 from pages import get_page_images, get_pdf_images
 from normalize import get_normalizer, normalize_transcribe
+from chrome_ocr_engine import chrome_transcribe_page, get_screenai_engine
 from windows_ocr import get_ocr_engine, oneocr_transcribe_page
 
 
@@ -86,6 +87,9 @@ def main():
     if args.engine == "oneocr":
         engine = get_ocr_engine()
         transcribe = lambda p: oneocr_transcribe_page(engine, p)
+    elif args.engine == "chrome":
+        engine = get_screenai_engine()
+        transcribe = lambda p: chrome_transcribe_page(engine, p)
     else:
         processor, model, device = load_model(force_cpu=args.cpu)
         transcribe = lambda p: transcribe_page(processor, model, p, args.max_new_tokens)

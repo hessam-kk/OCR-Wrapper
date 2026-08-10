@@ -9,3 +9,4 @@ tqdm
 pdf-inspector
 oneocr
 hazm
+# chrome OCR engine (optional, git-based): git clone https://github.com/ayismas/chrome-ocr && cd chrome-ocr && pip install -e ".[pdf]"
