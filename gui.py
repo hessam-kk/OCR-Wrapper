@@ -12,6 +12,7 @@ from model import MODEL_ID, load_model, model_cache_info, repo_size_gb, write_in
 from normalize import get_normalizer, normalize_transcribe
 from ocr import FORMATS, run_ocr_pages, transcribe_page
 from pages import PDF_DPI, get_page_images, get_pdf_images
+from chrome_ocr_engine import chrome_transcribe_page, get_screenai_engine
 from windows_ocr import get_ocr_engine, oneocr_transcribe_page
 
 
@@ -84,6 +85,7 @@ class OCRApp:
         ttk.Radiobutton(opt_frame, text="Windows OCR (oneocr) - fastest, recommended", variable=self.engine_var, value="oneocr").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
         ttk.Radiobutton(opt_frame, text="Bina OCR (OCR)", variable=self.engine_var, value="bina").grid(row=1, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
         ttk.Radiobutton(opt_frame, text="pdf-inspector (Parser)", variable=self.engine_var, value="inspector").grid(row=1, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="Chrome OCR (Screen AI)", variable=self.engine_var, value="chrome").grid(row=1, column=4, sticky="w", padx=(8, 0), pady=(6, 0))
 
         ttk.Label(opt_frame, text="Device:").grid(row=2, column=0, sticky="w", pady=(6, 0))
         self.device_var = tk.StringVar(value="cuda" if torch.cuda.is_available() else "cpu")
@@ -249,6 +251,10 @@ class OCRApp:
                 self.root.after(0, lambda: self.status_label.configure(text="Loading Windows OCR engine..."))
                 ocr_engine = get_ocr_engine()
                 transcribe = lambda p: oneocr_transcribe_page(ocr_engine, p)
+            elif engine == "chrome":
+                self.root.after(0, lambda: self.status_label.configure(text="Loading Chrome Screen AI..."))
+                ocr_engine = get_screenai_engine()
+                transcribe = lambda p: chrome_transcribe_page(ocr_engine, p)
             else:
                 # Load model
                 cached, cache_size = model_cache_info()
