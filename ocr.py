@@ -38,11 +38,12 @@ def transcribe_page(processor, model, image_path: Path, max_new_tokens: int) -> 
     return text.strip()
 
 
-def run_ocr_pages(processor, model, pages, output_path, max_new_tokens,
+def run_ocr_pages(transcribe, pages, output_path,
                   log=print, progress=None, should_stop=lambda: False):
     """OCR each page and write the transcript.
 
-    log(msg) -> None      called for page results and the summary
+    transcribe(page_path) -> str     engine-specific page transcription
+    log(msg) -> None                 called for page results and the summary
     progress(i, total, elapsed, name) -> None   called after each page
     should_stop() -> bool checked before each page
     """
@@ -59,7 +60,7 @@ def run_ocr_pages(processor, model, pages, output_path, max_new_tokens,
             page_start = time.time()
 
             try:
-                text = transcribe_page(processor, model, page_path, max_new_tokens)
+                text = transcribe(page_path)
             except torch.cuda.OutOfMemoryError:
                 torch.cuda.empty_cache()
                 text = "[ERROR: out of memory, page skipped]"

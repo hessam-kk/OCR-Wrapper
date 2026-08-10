@@ -7,3 +7,4 @@ safetensors
 pillow
 tqdm
 pdf-inspector
+oneocr
