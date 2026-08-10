@@ -8,7 +8,7 @@ Batch OCR extraction using [Reza2kn/Bina-0.1](https://huggingface.co/Reza2kn/Bin
 
 - **PDF input** — renders pages at configurable DPI via PyMuPDF
 - **Image folder input** — processes sorted image files (jpg, png, webp, etc.)
-- **Three engines** — `bina` (vision-model OCR, handles scanned/images), `pdf-inspector` (instant text extraction for text-based PDFs), or `oneocr` (Windows Snipping Tool OCR)
+- **Four engines** — `bina` (vision-model OCR, handles scanned/images), `pdf-inspector` (instant text extraction for text-based PDFs), `oneocr` (Windows Snipping Tool OCR), or `chrome` (Chrome/Edge Screen AI OCR)
 - **Persian normalization** — optional hazm post-processing that reinserts half-spaces (ZWNJ) and unifies glyphs/digits, which OCR models often drop
 - **Tkinter GUI** — file pickers, progress bar, live log, engine + GPU/CPU selectors (launches by default with no args)
 - **CLI mode** — for scripting and batch runs
@@ -65,6 +65,12 @@ With Persian normalization (reinserts half-spaces/ZWNJ that OCR models often dro
 python book_ocr_batch.py --pdf book.pdf --engine oneocr --normalize --output_file transcript.md
 ```
 
+Chrome/Edge Screen AI OCR (offline, layout-aware — needs setup, see Notes):
+
+```bash
+python book_ocr_batch.py --pdf book.pdf --engine chrome --output_file transcript.md
+```
+
 ### CLI — Image folder
 
 ```bash
@@ -80,7 +86,7 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 | `--output_file` | `book_transcript.md` | Transcript output path |
 | `--max_new_tokens` | `1024` | Max tokens generated per page |
 | `--limit` | all | Process only first N pages |
-| `--engine` | `bina` | `bina` (vision OCR), `inspector` (pdf-inspector, PDF only) or `oneocr` (Windows OCR) |
+| `--engine` | `bina` | `bina` (vision OCR), `inspector` (pdf-inspector, PDF only), `oneocr` (Windows OCR) or `chrome` (Chrome Screen AI) |
 | `--normalize` | off | Normalize Persian text with hazm (reinserts half-spaces/ZWNJ) |
 | `--cpu` | off | Force CPU even if GPU is available |
 | `--gui` | — | Launch GUI explicitly |
@@ -156,6 +162,7 @@ python -c "from windows_ocr import get_ocr_engine; get_ocr_engine(); print('oneo
 - Model is cached locally after first download (~1.3GB); the tool checks the cache and asks before downloading
 - pdf-inspector is instant (<1s) but only handles text-based PDFs — scanned pages need the `bina` engine
 - oneocr does not emit U+200C (ZWNJ) — the `--normalize` flag fixes half-spaces (`می‌رود`) and unifies digits/glyphs via [hazm](https://github.com/sobhe/hazm); works with any engine
+- `chrome` engine needs [chrome-ocr](https://github.com/ayismas/chrome-ocr) installed from source (`git clone https://github.com/ayismas/chrome-ocr && cd chrome-ocr && pip install -e ".[pdf]"`), plus the Screen AI DLL: open Chrome → Settings → Accessibility, enable a screen-reader option, and confirm `chrome_screen_ai.dll` lands in `%LOCALAPPDATA%\Google\Chrome\User Data\screen_ai\` (run `chrome-ocr doctor` to verify). Edge's DLL lives at a different path — the wrapper only auto-detects Chrome's, but `ScreenAIEngine(dll_path=...)` accepts a custom path. Windows-only; DLL subject to Google's terms
 - 150 DPI is default for PDF rendering; raise for better accuracy, lower for speed
 - Expect minutes/page on low-end GPUs; ~10-30s/page on a proper GPU
 - `torch.cuda.empty_cache()` runs every 10 pages for low-VRAM GPUs
