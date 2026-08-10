@@ -49,6 +49,9 @@ class OCRApp:
         ttk.Entry(out_frame, textvariable=self.output_file, width=50).grid(row=0, column=1, sticky="ew", padx=(4, 4))
         ttk.Button(out_frame, text="Browse", command=self._browse_output).grid(row=0, column=2)
 
+        self.folder_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(out_frame, text="Save in folder", variable=self.folder_var).grid(row=0, column=3, sticky="w", padx=(12, 0))
+
         ttk.Label(out_frame, text="Formats:").grid(row=1, column=0, sticky="w", pady=(4, 0))
         self.format_vars = {}
         fmt_frame = ttk.Frame(out_frame)
@@ -161,6 +164,12 @@ class OCRApp:
             "Download it now?",
         )
 
+    def _output_base(self):
+        base = Path(self.output_file.get())
+        if self.folder_var.get():
+            base = base / base.name
+        return base
+
     # --- OCR worker ---
 
     def _start(self):
@@ -196,7 +205,7 @@ class OCRApp:
                 if not input_path.is_file():
                     self.root.after(0, lambda: messagebox.showerror("Error", f"PDF not found: {input_path}"))
                     return
-                output_base = Path(self.output_file.get())
+                output_base = self._output_base()
                 formats = [f for f, v in self.format_vars.items() if v.get()]
                 self.root.after(0, lambda: self.status_label.configure(text="Extracting text..."))
                 write_inspector_transcript(
@@ -229,7 +238,7 @@ class OCRApp:
             total = len(pages)
             self.root.after(0, lambda: self._log(f"Found {total} pages to process."))
 
-            output_base = Path(self.output_file.get())
+            output_base = self._output_base()
             formats = [f for f, v in self.format_vars.items() if v.get()]
 
             if self.normalize_var.get():

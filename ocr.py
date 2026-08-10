@@ -108,6 +108,7 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl"):
     if direction == "rtl":
         body = '<div dir="rtl">\n\n' + body + "</div>\n"
     output_base = Path(output_base)
+    output_base.parent.mkdir(parents=True, exist_ok=True)
     requested = set(formats)
 
     need_md = "md" in requested or {"epub", "pdf", "azw3"} & requested
