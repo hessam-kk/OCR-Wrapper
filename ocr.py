@@ -233,15 +233,26 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
     requested = set(formats)
 
     body = "\n\n".join(texts).strip() + "\n"
-    if direction == "rtl":
-        body = '<div dir="rtl">\n\n' + body + "</div>\n"
-
-    # md/txt keep the plain body; epub/pdf/azw3 get "## Page N" headings so
-    # calibre can split large books (it fails with SplitError otherwise).
     md_body = body
-    ebook_body = "\n\n".join(f"## Page {i + 1}\n\n{text}" for i, text in enumerate(texts)) + "\n"
     if direction == "rtl":
-        ebook_body = '<div dir="rtl">\n\n' + ebook_body + "</div>\n"
+        md_body = '<div dir="rtl">\n\n' + body + "</div>\n"
+
+    # The ebook body must NOT be wrapped in a single raw-HTML div: markdown
+    # inside a raw HTML block is not parsed, so "## Page" headings and
+    # paragraph breaks would flatten to literal text and calibre's splitter
+    # would find no legal split points (SplitError on large books). Use
+    # per-paragraph HTML tags instead; markdown stays parseable outside them.
+    ebook_parts = []
+    for i, text in enumerate(texts):
+        if text.startswith("[ERROR"):
+            ebook_parts.append(text)
+            continue
+        paras = [p.strip() for p in text.split("\n\n") if p.strip()]
+        if not paras:
+            continue
+        joined = "\n\n".join(f'<p dir="{direction}">{p}</p>' for p in paras)
+        ebook_parts.append(f"## Page {i + 1}\n\n{joined}")
+    ebook_body = "\n\n".join(ebook_parts) + "\n"
 
     if "md" in requested or {"epub", "pdf", "azw3"} & requested:
         md_path = output_base.with_suffix(".md")
@@ -257,9 +268,9 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
         ebook_md_path = output_base.with_suffix(".ebook.md")
         ebook_md_path.write_text(ebook_body, encoding="utf-8")
         epub_path = output_base.with_suffix(".epub")
-        # --flow-size 0 disables size-based splitting; calibre's splitter
-        # fails on large single-block markdown (SplitError) otherwise.
-        _convert(ebook_md_path, epub_path, log, "--title", title, "--flow-size", "0")
+        # Headings + paragraph tags give calibre legal split points; the
+        # default 260KB flow-size now splits properly instead of SplitError.
+        _convert(ebook_md_path, epub_path, log, "--title", title)
 
     if "pdf" in requested:
         _convert(epub_path, output_base.with_suffix(".pdf"), log,
