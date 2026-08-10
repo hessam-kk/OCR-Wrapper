@@ -28,9 +28,9 @@ class OCRApp:
         src_frame = ttk.LabelFrame(root, text="Input Source", padding=8)
         src_frame.pack(fill="x", padx=10, pady=(10, 4))
 
-        self.input_type = tk.StringVar(value="dir")
-        ttk.Radiobutton(src_frame, text="Image Folder", variable=self.input_type, value="dir").grid(row=0, column=0, sticky="w")
-        ttk.Radiobutton(src_frame, text="PDF File", variable=self.input_type, value="pdf").grid(row=0, column=1, sticky="w", padx=(10, 0))
+        self.input_type = tk.StringVar(value="pdf")
+        ttk.Radiobutton(src_frame, text="PDF File", variable=self.input_type, value="pdf").grid(row=0, column=0, sticky="w")
+        ttk.Radiobutton(src_frame, text="Image Folder", variable=self.input_type, value="dir").grid(row=0, column=1, sticky="w", padx=(10, 0))
 
         self.input_path = tk.StringVar()
         path_frame = ttk.Frame(src_frame)
