@@ -1,5 +1,6 @@
 """Tkinter GUI for batch OCR."""
 
+import itertools
 import tempfile
 import threading
 import tkinter as tk
@@ -225,19 +226,21 @@ class OCRApp:
                     return
                 pdf_tmp_dir = Path(tempfile.mkdtemp(prefix="ocr_pdf_"))
                 dpi = int(self.dpi_var.get())
-                self.root.after(0, lambda: self._log(f"Rendering PDF pages at {dpi} DPI..."))
-                pages = get_pdf_images(input_path, pdf_tmp_dir, dpi)
+                self.root.after(0, lambda: self._log(f"Rendering PDF pages at {dpi} DPI (lazy, page by page)..."))
+                pages, total = get_pdf_images(input_path, pdf_tmp_dir, dpi)
+                if limit > 0:
+                    pages = itertools.islice(pages, limit)
+                    total = min(total, limit)
             else:
                 if not input_path.is_dir():
                     self.root.after(0, lambda: messagebox.showerror("Error", f"Folder not found: {input_path}"))
                     return
                 pages = get_page_images(input_path)
+                total = len(pages)
+                if limit > 0:
+                    pages = pages[:limit]
+                    total = len(pages)
 
-            limit = self.page_limit.get()
-            if limit > 0:
-                pages = pages[:limit]
-
-            total = len(pages)
             self.root.after(0, lambda: self._log(f"Found {total} pages to process."))
 
             output_base = self._output_base()
