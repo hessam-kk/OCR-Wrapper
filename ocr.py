@@ -95,7 +95,7 @@ def run_ocr_pages(transcribe, pages, output_base, formats,
     log(f"Average time/page: {sum(t for _, t in timings) / len(timings):.2f}s")
 
 
-def write_outputs(texts, output_base, formats, log=print, direction="rtl"):
+def write_outputs(texts, output_base, formats, log=print, direction="rtl", title=None):
     """Write the transcript body in each requested format.
 
     md/txt are written directly; epub/pdf/azw3 go through calibre
@@ -109,6 +109,10 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl"):
         body = '<div dir="rtl">\n\n' + body + "</div>\n"
     output_base = Path(output_base)
     output_base.parent.mkdir(parents=True, exist_ok=True)
+    if title is None:
+        title = output_base.name
+        if title.endswith("_transcript"):
+            title = title[: -len("_transcript")]
     requested = set(formats)
 
     need_md = "md" in requested or {"epub", "pdf", "azw3"} & requested
@@ -124,15 +128,15 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl"):
 
     if {"epub", "pdf", "azw3"} & requested:
         epub_path = output_base.with_suffix(".epub")
-        if "epub" not in requested or not epub_path.exists():
-            _convert(md_path, epub_path, log)
+        _convert(md_path, epub_path, log, "--title", title)
 
     if "pdf" in requested:
         _convert(epub_path, output_base.with_suffix(".pdf"), log,
-                 "--pdf-serif-family", PDF_SERIF_FAMILY)
+                 "--title", title, "--pdf-serif-family", PDF_SERIF_FAMILY)
 
     if "azw3" in requested:
-        _convert(epub_path, output_base.with_suffix(".azw3"), log)
+        _convert(epub_path, output_base.with_suffix(".azw3"), log,
+                 "--title", title)
 
 
 def _convert(src, dst, log, *extra_args):
