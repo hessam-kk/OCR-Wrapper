@@ -104,9 +104,6 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
     direction ("rtl"/"ltr") marks the md body direction for renderers.
     """
     formats = [f for f in formats if f in FORMATS]
-    body = "\n\n".join(texts).strip() + "\n"
-    if direction == "rtl":
-        body = '<div dir="rtl">\n\n' + body + "</div>\n"
     output_base = Path(output_base)
     output_base.parent.mkdir(parents=True, exist_ok=True)
     if title is None:
@@ -115,10 +112,20 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
             title = title[: -len("_transcript")]
     requested = set(formats)
 
-    need_md = "md" in requested or {"epub", "pdf", "azw3"} & requested
-    if need_md:
+    body = "\n\n".join(texts).strip() + "\n"
+    if direction == "rtl":
+        body = '<div dir="rtl">\n\n' + body + "</div>\n"
+
+    # md/txt keep the plain body; epub/pdf/azw3 get "## Page N" headings so
+    # calibre can split large books (it fails with SplitError otherwise).
+    md_body = body
+    ebook_body = "\n\n".join(f"## Page {i + 1}\n\n{text}" for i, text in enumerate(texts)) + "\n"
+    if direction == "rtl":
+        ebook_body = '<div dir="rtl">\n\n' + ebook_body + "</div>\n"
+
+    if "md" in requested or {"epub", "pdf", "azw3"} & requested:
         md_path = output_base.with_suffix(".md")
-        md_path.write_text(body, encoding="utf-8")
+        md_path.write_text(md_body, encoding="utf-8")
         log(f"Wrote {md_path.name}")
 
     if "txt" in requested:
@@ -127,8 +134,10 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
         log(f"Wrote {txt_path.name}")
 
     if {"epub", "pdf", "azw3"} & requested:
+        ebook_md_path = output_base.with_suffix(".ebook.md")
+        ebook_md_path.write_text(ebook_body, encoding="utf-8")
         epub_path = output_base.with_suffix(".epub")
-        _convert(md_path, epub_path, log, "--title", title)
+        _convert(ebook_md_path, epub_path, log, "--title", title)
 
     if "pdf" in requested:
         _convert(epub_path, output_base.with_suffix(".pdf"), log,

@@ -10,7 +10,7 @@ from inspector import inspector_to_markdown
 from ocr import write_outputs
 
 MODEL_ID = "Reza2kn/Bina-0.1"
-ENGINES = ("bina", "inspector", "oneocr")
+ENGINES = ("bina", "inspector", "oneocr", "chrome")
 
 
 def model_cache_info():
