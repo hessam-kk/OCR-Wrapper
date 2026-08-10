@@ -114,6 +114,8 @@ class OCRApp:
             )
         if path:
             self.input_path.set(path)
+            if self.input_type.get() == "pdf":
+                self.output_file.set(Path(path).stem + "_transcript.md")
 
     def _browse_output(self):
         path = filedialog.asksaveasfilename(
