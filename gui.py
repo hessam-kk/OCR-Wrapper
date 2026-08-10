@@ -9,6 +9,7 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 import torch
 
 from model import MODEL_ID, load_model, model_cache_info, repo_size_gb, write_inspector_transcript
+from normalize import get_normalizer, normalize_transcribe
 from ocr import run_ocr_pages, transcribe_page
 from pages import PDF_DPI, get_page_images, get_pdf_images
 from windows_ocr import get_ocr_engine, oneocr_transcribe_page
@@ -72,6 +73,9 @@ class OCRApp:
         self.device_var = tk.StringVar(value="cuda" if torch.cuda.is_available() else "cpu")
         ttk.Radiobutton(opt_frame, text="GPU", variable=self.device_var, value="cuda").grid(row=2, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
         ttk.Radiobutton(opt_frame, text="CPU", variable=self.device_var, value="cpu").grid(row=2, column=2, sticky="w", padx=(16, 0), pady=(6, 0))
+
+        self.normalize_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opt_frame, text="Normalize Persian (half-spaces)", variable=self.normalize_var).grid(row=3, column=0, columnspan=4, sticky="w", pady=(6, 0))
 
         # --- Progress ---
         prog_frame = ttk.Frame(root, padding=8)
@@ -205,6 +209,10 @@ class OCRApp:
 
             output_path = Path(self.output_file.get())
 
+            if self.normalize_var.get():
+                normalizer = get_normalizer()
+                self.root.after(0, lambda: self._log("[INFO] Persian normalization enabled (hazm)"))
+
             if engine == "oneocr":
                 self.root.after(0, lambda: self.status_label.configure(text="Loading Windows OCR engine..."))
                 ocr_engine = get_ocr_engine()
@@ -227,6 +235,9 @@ class OCRApp:
                 )
                 max_tokens = self.max_tokens.get()
                 transcribe = lambda p: transcribe_page(processor, model, p, max_tokens)
+
+            if self.normalize_var.get():
+                transcribe = normalize_transcribe(transcribe, normalizer)
 
             self.root.after(0, lambda: self.status_label.configure(text=f"Processing 0/{total} pages..."))
             self.root.after(0, lambda: self.progress.configure(maximum=total))
