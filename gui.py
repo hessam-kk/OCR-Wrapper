@@ -50,7 +50,7 @@ class OCRApp:
         ttk.Entry(out_frame, textvariable=self.output_file, width=50).grid(row=0, column=1, sticky="ew", padx=(4, 4))
         ttk.Button(out_frame, text="Browse", command=self._browse_output).grid(row=0, column=2)
 
-        self.folder_var = tk.BooleanVar(value=False)
+        self.folder_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(out_frame, text="Save in folder", variable=self.folder_var).grid(row=0, column=3, sticky="w", padx=(12, 0))
 
         ttk.Label(out_frame, text="Formats:").grid(row=1, column=0, sticky="w", pady=(4, 0))
@@ -68,11 +68,11 @@ class OCRApp:
         opt_frame = ttk.LabelFrame(root, text="Options", padding=8)
         opt_frame.pack(fill="x", padx=10, pady=4)
 
-        ttk.Label(opt_frame, text="Max new tokens:").grid(row=0, column=0, sticky="w")
+        ttk.Label(opt_frame, text="Max tokens:").grid(row=0, column=0, sticky="w")
         self.max_tokens = tk.IntVar(value=1024)
-        ttk.Spinbox(opt_frame, from_=64, to=4096, textvariable=self.max_tokens, width=8).grid(row=0, column=1, sticky="w", padx=(4, 8))
+        ttk.Spinbox(opt_frame, from_=64, to=4096, textvariable=self.max_tokens, width=8).grid(row=0, column=1, sticky="w", padx=(4, 0))
 
-        ttk.Label(opt_frame, text="Page limit (0=all):").grid(row=0, column=2, sticky="w")
+        ttk.Label(opt_frame, text="Page limit:").grid(row=0, column=2, sticky="w", padx=(8, 0))
         self.page_limit = tk.IntVar(value=0)
         ttk.Spinbox(opt_frame, from_=0, to=99999, textvariable=self.page_limit, width=8).grid(row=0, column=3, sticky="w", padx=(4, 0))
 
@@ -81,11 +81,11 @@ class OCRApp:
         ttk.Combobox(opt_frame, textvariable=self.dpi_var, values=["150", "200", "300", "400"], width=5, state="readonly").grid(row=0, column=5, sticky="w", padx=(4, 0))
 
         ttk.Label(opt_frame, text="Engine:").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        self.engine_var = tk.StringVar(value="oneocr")
-        ttk.Radiobutton(opt_frame, text="Windows OCR (oneocr) - fastest, recommended", variable=self.engine_var, value="oneocr").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="Bina OCR (OCR)", variable=self.engine_var, value="bina").grid(row=1, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="pdf-inspector (Parser)", variable=self.engine_var, value="inspector").grid(row=1, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="Chrome OCR (Screen AI)", variable=self.engine_var, value="chrome").grid(row=1, column=4, sticky="w", padx=(8, 0), pady=(6, 0))
+        self.engine_var = tk.StringVar(value="chrome")
+        ttk.Radiobutton(opt_frame, text="Chrome OCR (Screen AI) - best", variable=self.engine_var, value="chrome").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="Windows OCR (oneocr)", variable=self.engine_var, value="oneocr").grid(row=1, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="Bina OCR (OCR)", variable=self.engine_var, value="bina").grid(row=1, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="pdf-inspector (Parser)", variable=self.engine_var, value="inspector").grid(row=1, column=4, sticky="w", padx=(8, 0), pady=(6, 0))
 
         ttk.Label(opt_frame, text="Device:").grid(row=2, column=0, sticky="w", pady=(6, 0))
         self.device_var = tk.StringVar(value="cuda" if torch.cuda.is_available() else "cpu")
