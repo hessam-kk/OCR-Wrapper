@@ -123,41 +123,53 @@ def _run_sequential(transcribe, pages, total, log, progress, should_stop):
 
 
 def _run_parallel(transcribe, pages, total, workers, log, progress, should_stop):
-    # Parallel workers need random access; materialize the lazy PDF iterator.
-    try:
-        pages = list(pages)
-        if total is None:
-            total = len(pages)
-    except TypeError:
-        pass  # already a list
+    # Keep pages lazy: prefetch only `workers` ahead so PDF rendering stays
+    # incremental (materializing the whole iterator defeats lazy rendering).
+    # Use a while-pending wait loop so newly submitted futures are awaited.
+    from concurrent.futures import wait, FIRST_COMPLETED
 
-    texts = [None] * len(pages)
+    texts = {}
     stop = False
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         pending = {}
-        for idx, page_path in enumerate(pages):
-            if should_stop() or stop:
-                stop = True
+        page_iter = enumerate(pages, start=1)
+        for _ in range(workers):
+            try:
+                idx, page_path = next(page_iter)
+            except StopIteration:
                 break
             page_start = time.time()
             fut = pool.submit(_ocr_worker, transcribe, page_path)
             pending[fut] = (idx, page_path, page_start)
 
-        for fut in as_completed(pending):
-            idx, page_path, page_start = pending[fut]
-            text = fut.result()
-            if text.startswith("[ERROR"):
-                log(f"  {text} ({page_path.name})")
-            texts[idx] = text
-            elapsed = time.time() - page_start
-            log(f"[{idx + 1}/{total or '?'}] {page_path.name} - {elapsed:.2f}s")
-            if progress:
-                progress(idx + 1, total or 0, elapsed, page_path.name)
+        while pending:
+            done, _ = wait(list(pending), return_when=FIRST_COMPLETED)
+            for fut in done:
+                idx, page_path, page_start = pending.pop(fut)
+                text = fut.result()
+                if text.startswith("[ERROR"):
+                    log(f"  {text} ({page_path.name})")
+                texts[idx] = text
+                elapsed = time.time() - page_start
+                log(f"[{idx}/{total or '?'}] {page_path.name} - {elapsed:.2f}s")
+                if progress:
+                    progress(idx, total or 0, elapsed, page_path.name)
+
+                if not (should_stop() or stop):
+                    try:
+                        nidx, npath = next(page_iter)
+                    except StopIteration:
+                        continue
+                    page_start = time.time()
+                    fut = pool.submit(_ocr_worker, transcribe, npath)
+                    pending[fut] = (nidx, npath, page_start)
+                else:
+                    stop = True
 
     if stop:
         log("Stopped by user.")
-    return [t for t in texts if t is not None]
+    return [texts[i] for i in sorted(texts)]
 
 
 # Process-pool worker: the transcribe closure can't be pickled and module
@@ -180,39 +192,51 @@ def _process_worker(args):
 
 
 def _run_process_parallel(engine_name, pages, total, workers, log, progress, should_stop):
-    try:
-        pages = list(pages)
-        if total is None:
-            total = len(pages)
-    except TypeError:
-        pass
+    # Same lazy prefetch pattern as threads; each child builds its own engine.
+    from concurrent.futures import wait, FIRST_COMPLETED
 
-    texts = [None] * len(pages)
+    texts = {}
     stop = False
+
     with ProcessPoolExecutor(max_workers=workers) as pool:
         pending = {}
-        for idx, page_path in enumerate(pages):
-            if should_stop() or stop:
-                stop = True
+        page_iter = enumerate(pages, start=1)
+        for _ in range(workers):
+            try:
+                idx, page_path = next(page_iter)
+            except StopIteration:
                 break
             page_start = time.time()
             fut = pool.submit(_process_worker, (engine_name, str(page_path)))
             pending[fut] = (idx, page_path, page_start)
 
-        for fut in as_completed(pending):
-            idx, page_path, page_start = pending[fut]
-            text = fut.result()
-            if text.startswith("[ERROR"):
-                log(f"  {text} ({page_path.name})")
-            texts[idx] = text
-            elapsed = time.time() - page_start
-            log(f"[{idx + 1}/{total or '?'}] {page_path.name} - {elapsed:.2f}s")
-            if progress:
-                progress(idx + 1, total or 0, elapsed, page_path.name)
+        while pending:
+            done, _ = wait(list(pending), return_when=FIRST_COMPLETED)
+            for fut in done:
+                idx, page_path, page_start = pending.pop(fut)
+                text = fut.result()
+                if text.startswith("[ERROR"):
+                    log(f"  {text} ({page_path.name})")
+                texts[idx] = text
+                elapsed = time.time() - page_start
+                log(f"[{idx}/{total or '?'}] {page_path.name} - {elapsed:.2f}s")
+                if progress:
+                    progress(idx, total or 0, elapsed, page_path.name)
+
+                if not (should_stop() or stop):
+                    try:
+                        nidx, npath = next(page_iter)
+                    except StopIteration:
+                        continue
+                    page_start = time.time()
+                    fut = pool.submit(_process_worker, (engine_name, str(npath)))
+                    pending[fut] = (nidx, npath, page_start)
+                else:
+                    stop = True
 
     if stop:
         log("Stopped by user.")
-    return [t for t in texts if t is not None]
+    return [texts[i] for i in sorted(texts)]
 
 
 def write_outputs(texts, output_base, formats, log=print, direction="rtl", title=None):
