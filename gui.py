@@ -74,7 +74,7 @@ class OCRApp:
         ttk.Radiobutton(opt_frame, text="GPU", variable=self.device_var, value="cuda").grid(row=2, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
         ttk.Radiobutton(opt_frame, text="CPU", variable=self.device_var, value="cpu").grid(row=2, column=2, sticky="w", padx=(16, 0), pady=(6, 0))
 
-        self.normalize_var = tk.BooleanVar(value=False)
+        self.normalize_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(opt_frame, text="Normalize Persian (half-spaces)", variable=self.normalize_var).grid(row=3, column=0, columnspan=4, sticky="w", pady=(6, 0))
 
         # --- Progress ---
