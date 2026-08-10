@@ -96,10 +96,14 @@ class OCRApp:
         self.normalize_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(opt_frame, text="Normalize Persian (half-spaces)", variable=self.normalize_var).grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
-        ttk.Label(opt_frame, text="Direction:").grid(row=3, column=3, sticky="w", pady=(6, 0))
+        ttk.Label(opt_frame, text="Workers:").grid(row=3, column=3, sticky="w", pady=(6, 0))
+        self.workers_var = tk.IntVar(value=1)
+        ttk.Spinbox(opt_frame, from_=1, to=8, textvariable=self.workers_var, width=4).grid(row=3, column=4, sticky="w", padx=(4, 0), pady=(6, 0))
+
+        ttk.Label(opt_frame, text="Direction:").grid(row=3, column=5, sticky="w", padx=(8, 0), pady=(6, 0))
         self.direction_var = tk.StringVar(value="rtl")
-        ttk.Radiobutton(opt_frame, text="RTL", variable=self.direction_var, value="rtl").grid(row=3, column=4, sticky="w", padx=(4, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="LTR", variable=self.direction_var, value="ltr").grid(row=3, column=5, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="RTL", variable=self.direction_var, value="rtl").grid(row=3, column=6, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="LTR", variable=self.direction_var, value="ltr").grid(row=3, column=7, sticky="w", padx=(4, 0), pady=(6, 0))
 
         # --- Progress ---
         prog_frame = ttk.Frame(root, padding=8)
@@ -288,10 +292,20 @@ class OCRApp:
                 self.progress.configure(value=i)
                 self.status_label.configure(text=f"Processing {i}/{tot} pages... ({elapsed:.1f}s)")
 
+            workers = self.workers_var.get()
+            if engine == "bina" and workers > 1:
+                self.root.after(0, lambda: self._log("[INFO] bina engine is single-device - ignoring workers"))
+                workers = 1
+            # chrome's DLL races across threads but is safe across processes
+            parallel_mode = "process" if engine == "chrome" else "thread"
+
             run_ocr_pages(
                 transcribe, pages, output_base, formats,
                 direction=self.direction_var.get(),
                 total=total,
+                workers=workers,
+                parallel_mode=parallel_mode,
+                parallel_engine=engine,
                 log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
                 progress=lambda i, t, e, n: self.root.after(0, lambda: on_progress(i, t, e, n)),
                 should_stop=lambda: not self.running,

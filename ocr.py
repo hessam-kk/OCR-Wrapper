@@ -2,6 +2,7 @@
 
 import subprocess
 import time
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import torch
@@ -41,8 +42,20 @@ def transcribe_page(processor, model, image_path: Path, max_new_tokens: int) -> 
     return text.strip()
 
 
+def _ocr_worker(transcribe, page_path):
+    """Transcribe one page, mapping errors to placeholder text."""
+    try:
+        return transcribe(page_path)
+    except torch.cuda.OutOfMemoryError:
+        torch.cuda.empty_cache()
+        return "[ERROR: out of memory, page skipped]"
+    except Exception as e:
+        return f"[ERROR: {e}]"
+
+
 def run_ocr_pages(transcribe, pages, output_base, formats,
-                  direction="rtl", total=None, log=print, progress=None,
+                  direction="rtl", total=None, workers=1, parallel_mode="thread",
+                  parallel_engine=None, log=print, progress=None,
                   should_stop=lambda: False):
     """OCR each page and export the transcript in the requested formats.
 
@@ -51,12 +64,16 @@ def run_ocr_pages(transcribe, pages, output_base, formats,
     formats                subset of FORMATS
     total                  known page count (None if unknown; derived from
                            len(pages) when possible)
+    workers                parallel page workers (1 = sequential)
+    parallel_mode          "thread" or "process" (chrome needs "process":
+                           its DLL races on shared state across threads but
+                           is safe across processes)
+    parallel_engine        engine name for process workers (each child
+                           rebuilds its own engine)
     log(msg) -> None       called for page results and the summary
     progress(i, total, elapsed, name) -> None   called after each page
     should_stop() -> bool checked before each page
     """
-    texts = []
-    timings = []
     total_start = time.time()
     if total is None:
         try:
@@ -64,42 +81,138 @@ def run_ocr_pages(transcribe, pages, output_base, formats,
         except TypeError:
             total = None  # lazy iterator (PDF pages render on demand)
 
-    for i, page_path in enumerate(pages, start=1):
-        if should_stop():
-            log("Stopped by user.")
-            break
-
-        page_start = time.time()
-
-        try:
-            text = transcribe(page_path)
-        except torch.cuda.OutOfMemoryError:
-            torch.cuda.empty_cache()
-            text = "[ERROR: out of memory, page skipped]"
-            log(f"  [OOM] {page_path.name}")
-        except Exception as e:
-            text = f"[ERROR: {e}]"
-            log(f"  [ERROR] {page_path.name}: {e}")
-
-        texts.append(text)
-        elapsed = time.time() - page_start
-        timings.append((page_path.name, round(elapsed, 2)))
-
-        if i % 10 == 0:
-            torch.cuda.empty_cache()
-
-        log(f"[{i}/{total or '?'}] {page_path.name} - {elapsed:.2f}s")
-        if progress:
-            progress(i, total or 0, elapsed, page_path.name)
+    if workers > 1:
+        if parallel_mode == "process":
+            texts = _run_process_parallel(parallel_engine, pages, total, workers, log, progress, should_stop)
+        else:
+            texts = _run_parallel(transcribe, pages, total, workers, log, progress, should_stop)
+    else:
+        texts = _run_sequential(transcribe, pages, total, log, progress, should_stop)
 
     total_elapsed = time.time() - total_start
 
     write_outputs(texts, output_base, formats, log, direction)
 
     log("\n--- Summary ---")
-    log(f"Pages processed: {len(timings)}")
+    log(f"Pages processed: {len(texts)}")
     log(f"Total time: {total_elapsed:.2f}s")
-    log(f"Average time/page: {sum(t for _, t in timings) / len(timings):.2f}s")
+    log(f"Average time/page: {total_elapsed / max(len(texts), 1):.2f}s")
+
+
+def _run_sequential(transcribe, pages, total, log, progress, should_stop):
+    texts = []
+    for i, page_path in enumerate(pages, start=1):
+        if should_stop():
+            log("Stopped by user.")
+            break
+
+        page_start = time.time()
+        text = _ocr_worker(transcribe, page_path)
+        if text.startswith("[ERROR"):
+            log(f"  {text} ({page_path.name})")
+        texts.append(text)
+
+        elapsed = time.time() - page_start
+        if i % 10 == 0:
+            torch.cuda.empty_cache()
+
+        log(f"[{i}/{total or '?'}] {page_path.name} - {elapsed:.2f}s")
+        if progress:
+            progress(i, total or 0, elapsed, page_path.name)
+    return texts
+
+
+def _run_parallel(transcribe, pages, total, workers, log, progress, should_stop):
+    # Parallel workers need random access; materialize the lazy PDF iterator.
+    try:
+        pages = list(pages)
+        if total is None:
+            total = len(pages)
+    except TypeError:
+        pass  # already a list
+
+    texts = [None] * len(pages)
+    stop = False
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        pending = {}
+        for idx, page_path in enumerate(pages):
+            if should_stop() or stop:
+                stop = True
+                break
+            page_start = time.time()
+            fut = pool.submit(_ocr_worker, transcribe, page_path)
+            pending[fut] = (idx, page_path, page_start)
+
+        for fut in as_completed(pending):
+            idx, page_path, page_start = pending[fut]
+            text = fut.result()
+            if text.startswith("[ERROR"):
+                log(f"  {text} ({page_path.name})")
+            texts[idx] = text
+            elapsed = time.time() - page_start
+            log(f"[{idx + 1}/{total or '?'}] {page_path.name} - {elapsed:.2f}s")
+            if progress:
+                progress(idx + 1, total or 0, elapsed, page_path.name)
+
+    if stop:
+        log("Stopped by user.")
+    return [t for t in texts if t is not None]
+
+
+# Process-pool worker: the transcribe closure can't be pickled and module
+# globals don't survive Windows spawn, so each child rebuilds its own engine
+# from the engine name.
+_ENGINE_BUILDERS = {}
+
+
+def _register_engine_builder(name, builder):
+    _ENGINE_BUILDERS[name] = builder
+
+
+def _process_worker(args):
+    engine_name, page_path = args
+    try:
+        transcribe = _ENGINE_BUILDERS[engine_name](page_path)
+    except KeyError:
+        return f"[ERROR: unknown engine {engine_name}]"
+    return _ocr_worker(transcribe, page_path)
+
+
+def _run_process_parallel(engine_name, pages, total, workers, log, progress, should_stop):
+    try:
+        pages = list(pages)
+        if total is None:
+            total = len(pages)
+    except TypeError:
+        pass
+
+    texts = [None] * len(pages)
+    stop = False
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        pending = {}
+        for idx, page_path in enumerate(pages):
+            if should_stop() or stop:
+                stop = True
+                break
+            page_start = time.time()
+            fut = pool.submit(_process_worker, (engine_name, str(page_path)))
+            pending[fut] = (idx, page_path, page_start)
+
+        for fut in as_completed(pending):
+            idx, page_path, page_start = pending[fut]
+            text = fut.result()
+            if text.startswith("[ERROR"):
+                log(f"  {text} ({page_path.name})")
+            texts[idx] = text
+            elapsed = time.time() - page_start
+            log(f"[{idx + 1}/{total or '?'}] {page_path.name} - {elapsed:.2f}s")
+            if progress:
+                progress(idx + 1, total or 0, elapsed, page_path.name)
+
+    if stop:
+        log("Stopped by user.")
+    return [t for t in texts if t is not None]
 
 
 def write_outputs(texts, output_base, formats, log=print, direction="rtl", title=None):

@@ -2,6 +2,25 @@
 
 from pathlib import Path
 
+from ocr import _register_engine_builder
+
+
+def _chrome_builder(page_path):
+    """Build a chrome transcribe closure inside a worker process."""
+    engine = get_screenai_engine()
+    return lambda p: chrome_transcribe_page(engine, p)
+
+
+# Registered at import so spawned worker processes (Windows spawn re-imports
+# modules) have the builder available for process-parallel runs.
+_register_engine_builder("chrome", _chrome_builder)
+
+
+def _chrome_builder(page_path):
+    """Build a chrome transcribe closure inside a worker process."""
+    engine = get_screenai_engine()
+    return lambda p: chrome_transcribe_page(engine, p)
+
 
 def get_screenai_engine():
     """Return a chrome_ocr.ScreenAIEngine, or raise a friendly error."""

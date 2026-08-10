@@ -37,6 +37,7 @@ def main():
     parser.add_argument("--cpu", action="store_true", help="Force CPU even if GPU is available")
     parser.add_argument("--normalize", action="store_true", help="Normalize Persian text with hazm (reinserts half-spaces/ZWNJ)")
     parser.add_argument("--direction", choices=("rtl", "ltr"), default="rtl", help="Text direction of the exported markdown")
+    parser.add_argument("--workers", type=int, default=1, help="Parallel page workers (2-8 speed up oneocr/chrome; bina stays 1)")
     args = parser.parse_args()
 
     # Launch GUI if --gui or no CLI args provided
@@ -109,10 +110,19 @@ def main():
     def show_progress(i, tot, elapsed, name):
         tqdm.write(f"[{i}/{tot}] {name} - {elapsed:.2f}s")
 
+    if args.engine == "bina" and args.workers > 1:
+        print("[INFO] bina engine is single-device - ignoring --workers")
+        args.workers = 1
+    # chrome's DLL races across threads but is safe across processes
+    parallel_mode = "process" if args.engine == "chrome" else "thread"
+
     run_ocr_pages(
         transcribe, pages, output_base, args.formats,
         direction=args.direction,
         total=total_pages,
+        workers=args.workers,
+        parallel_mode=parallel_mode,
+        parallel_engine=args.engine,
         log=print,
         progress=show_progress,
     )
