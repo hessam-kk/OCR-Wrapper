@@ -38,6 +38,7 @@ def main():
     parser.add_argument("--normalize", action="store_true", help="Normalize Persian text with hazm (reinserts half-spaces/ZWNJ)")
     parser.add_argument("--direction", choices=("rtl", "ltr"), default="rtl", help="Text direction of the exported markdown")
     parser.add_argument("--workers", type=int, default=1, help="Parallel page workers (2-8 speed up oneocr/chrome; bina stays 1)")
+    parser.add_argument("--skip-ocr", action="store_true", help="If the .md exists, skip OCR and only convert to the selected formats")
     args = parser.parse_args()
 
     # Launch GUI if --gui or no CLI args provided
@@ -55,6 +56,12 @@ def main():
         parser.error("--engine inspector requires --pdf (pdf-inspector only processes PDFs).")
 
     output_base = Path(args.output_file)
+
+    if args.skip_ocr:
+        from ocr import write_outputs
+        write_outputs(None, output_base, args.formats, print, args.direction)
+        print("[INFO] OCR skipped - re-exported from existing markdown")
+        return
 
     if args.engine == "inspector":
         write_inspector_transcript(Path(args.pdf), output_base, args.formats, args.direction)

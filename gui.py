@@ -54,6 +54,9 @@ class OCRApp:
         self.folder_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(out_frame, text="Save in folder", variable=self.folder_var).grid(row=0, column=3, sticky="w", padx=(12, 0))
 
+        self.skip_ocr_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(out_frame, text="Skip OCR (re-export from existing md)", variable=self.skip_ocr_var).grid(row=0, column=4, sticky="w", padx=(12, 0))
+
         ttk.Label(out_frame, text="Formats:").grid(row=1, column=0, sticky="w", pady=(4, 0))
         self.format_vars = {}
         fmt_frame = ttk.Frame(out_frame)
@@ -204,6 +207,17 @@ class OCRApp:
             input_path = Path(self.input_path.get().strip())
             input_type = self.input_type.get()
             engine = self.engine_var.get()
+
+            if self.skip_ocr_var.get():
+                output_base = self._output_base()
+                formats = [f for f, v in self.format_vars.items() if v.get()]
+                self.root.after(0, lambda: self.status_label.configure(text="Re-exporting..."))
+                run_ocr_pages(lambda p: None, [], output_base, formats,
+                              direction=self.direction_var.get(),
+                              workers=1,
+                              log=lambda m: self.root.after(0, lambda s=m: self._log(s)))
+                self.root.after(0, lambda: self.status_label.configure(text="Done"))
+                return
 
             if engine == "inspector":
                 if input_type != "pdf":

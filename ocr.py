@@ -246,6 +246,7 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
     (ebook-convert), chaining md -> epub -> pdf/azw3. pdf/azw3 need the
     epub, and epub needs the md, so intermediates are written as needed.
     direction ("rtl"/"ltr") marks the md body direction for renderers.
+    If texts is None and the .md exists, re-export from it (skip OCR).
     """
     formats = [f for f in formats if f in FORMATS]
     output_base = Path(output_base)
@@ -256,8 +257,23 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
             title = title[: -len("_transcript")]
     requested = set(formats)
 
-    body = "\n\n".join(texts).strip() + "\n"
-    md_body = body
+    md_path = output_base.with_suffix(".md")
+    if texts is None:
+        # Re-export from an existing markdown (skip OCR).
+        if not md_path.exists():
+            raise FileNotFoundError(f"Skip-OCR requested but {md_path.name} does not exist")
+        md_body = md_path.read_text(encoding="utf-8")
+        body = md_body
+        if md_body.startswith('<div dir="rtl">'):
+            body = md_body.replace('<div dir="rtl">', "").replace("</div>", "").strip()
+        texts = [p.strip() for p in body.split("\n\n") if p.strip() and not p.strip().startswith("## Page")]
+        if not texts:
+            texts = [body]
+    else:
+        body = "\n\n".join(texts).strip() + "\n"
+        md_body = body
+    if texts is not None and direction == "rtl" and not md_body.startswith("<div"):
+        md_body = '<div dir="rtl">\n\n' + md_body + "</div>\n"
     if direction == "rtl":
         md_body = '<div dir="rtl">\n\n' + body + "</div>\n"
 
@@ -279,13 +295,14 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
     ebook_body = "\n\n".join(ebook_parts) + "\n"
 
     if "md" in requested or {"epub", "pdf", "azw3"} & requested:
-        md_path = output_base.with_suffix(".md")
         md_path.write_text(md_body, encoding="utf-8")
         log(f"Wrote {md_path.name}")
 
     if "txt" in requested:
         txt_path = output_base.with_suffix(".txt")
-        txt_path.write_text(body, encoding="utf-8")
+        txt_path.write_text(body if not body.startswith("<div") else
+                            body.replace('<div dir="rtl">', "").replace("</div>", "").strip(),
+                            encoding="utf-8")
         log(f"Wrote {txt_path.name}")
 
     if {"epub", "pdf", "azw3"} & requested:
