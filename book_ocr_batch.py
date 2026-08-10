@@ -16,8 +16,9 @@ from tqdm import tqdm
 
 from gui import OCRApp
 from model import ENGINES, MODEL_ID, load_model, model_cache_info, repo_size_gb, write_inspector_transcript
-from ocr import run_ocr_pages
+from ocr import run_ocr_pages, transcribe_page
 from pages import get_page_images, get_pdf_images
+from windows_ocr import get_ocr_engine, oneocr_transcribe_page
 
 
 def main():
@@ -27,7 +28,7 @@ def main():
     parser.add_argument("--output_file", default="book_transcript.md", help="Combined transcript output path")
     parser.add_argument("--max_new_tokens", type=int, default=1024, help="Max tokens generated per page")
     parser.add_argument("--limit", type=int, default=None, help="Only process the first N pages")
-    parser.add_argument("--engine", choices=ENGINES, default="bina", help="OCR engine to use (bina: vision model, inspector: fast text extraction, PDF only)")
+    parser.add_argument("--engine", choices=ENGINES, default="bina", help="OCR engine to use (bina: vision model, inspector: fast text extraction, PDF only, oneocr: Windows Snipping Tool OCR)")
     parser.add_argument("--gui", action="store_true", help="Launch the GUI instead of CLI")
     parser.add_argument("--cpu", action="store_true", help="Force CPU even if GPU is available")
     args = parser.parse_args()
@@ -78,13 +79,18 @@ def main():
             print("Aborted - model not downloaded.")
             sys.exit(0)
 
-    processor, model, device = load_model(force_cpu=args.cpu)
+    if args.engine == "oneocr":
+        engine = get_ocr_engine()
+        transcribe = lambda p: oneocr_transcribe_page(engine, p)
+    else:
+        processor, model, device = load_model(force_cpu=args.cpu)
+        transcribe = lambda p: transcribe_page(processor, model, p, args.max_new_tokens)
 
     def show_progress(i, tot, elapsed, name):
         tqdm.write(f"[{i}/{tot}] {name} - {elapsed:.2f}s")
 
     run_ocr_pages(
-        processor, model, pages, output_path, args.max_new_tokens,
+        transcribe, pages, output_path,
         log=print,
         progress=show_progress,
     )
