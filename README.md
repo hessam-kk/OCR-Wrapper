@@ -9,6 +9,7 @@ Batch OCR extraction using [Reza2kn/Bina-0.1](https://huggingface.co/Reza2kn/Bin
 - **PDF input** — renders pages at configurable DPI via PyMuPDF
 - **Image folder input** — processes sorted image files (jpg, png, webp, etc.)
 - **Three engines** — `bina` (vision-model OCR, handles scanned/images), `pdf-inspector` (instant text extraction for text-based PDFs), or `oneocr` (Windows Snipping Tool OCR)
+- **Persian normalization** — optional hazm post-processing that reinserts half-spaces (ZWNJ) and unifies glyphs/digits, which OCR models often drop
 - **Tkinter GUI** — file pickers, progress bar, live log, engine + GPU/CPU selectors (launches by default with no args)
 - **CLI mode** — for scripting and batch runs
 - **CPU fallback** — `--cpu` flag, or GPU/CPU selector in the GUI
@@ -52,10 +53,16 @@ Fast text extraction of a text-based PDF (no OCR, no model download):
 python book_ocr_batch.py --pdf book.pdf --engine inspector --output_file transcript.md
 ```
 
-Windows Snipping Tool OCR (high accuracy, fully offline — needs model files, see Notes):
+Windows Snipping Tool OCR (high accuracy, fully offline — needs model files, see [oneocr setup](#oneocr-setup-windows-snipping-tool-ocr)):
 
 ```bash
 python book_ocr_batch.py --pdf book.pdf --engine oneocr --output_file transcript.md
+```
+
+With Persian normalization (reinserts half-spaces/ZWNJ that OCR models often drop — recommended for Persian text):
+
+```bash
+python book_ocr_batch.py --pdf book.pdf --engine oneocr --normalize --output_file transcript.md
 ```
 
 ### CLI — Image folder
@@ -74,6 +81,7 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 | `--max_new_tokens` | `1024` | Max tokens generated per page |
 | `--limit` | all | Process only first N pages |
 | `--engine` | `bina` | `bina` (vision OCR), `inspector` (pdf-inspector, PDF only) or `oneocr` (Windows OCR) |
+| `--normalize` | off | Normalize Persian text with hazm (reinserts half-spaces/ZWNJ) |
 | `--cpu` | off | Force CPU even if GPU is available |
 | `--gui` | — | Launch GUI explicitly |
 
@@ -147,6 +155,7 @@ python -c "from windows_ocr import get_ocr_engine; get_ocr_engine(); print('oneo
 
 - Model is cached locally after first download (~1.3GB); the tool checks the cache and asks before downloading
 - pdf-inspector is instant (<1s) but only handles text-based PDFs — scanned pages need the `bina` engine
+- oneocr does not emit U+200C (ZWNJ) — the `--normalize` flag fixes half-spaces (`می‌رود`) and unifies digits/glyphs via [hazm](https://github.com/sobhe/hazm); works with any engine
 - 150 DPI is default for PDF rendering; raise for better accuracy, lower for speed
 - Expect minutes/page on low-end GPUs; ~10-30s/page on a proper GPU
 - `torch.cuda.empty_cache()` runs every 10 pages for low-VRAM GPUs
