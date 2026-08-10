@@ -64,10 +64,10 @@ class OCRApp:
         ttk.Spinbox(opt_frame, from_=0, to=99999, textvariable=self.page_limit, width=8).grid(row=0, column=3, sticky="w", padx=(4, 0))
 
         ttk.Label(opt_frame, text="Engine:").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        self.engine_var = tk.StringVar(value="bina")
-        ttk.Radiobutton(opt_frame, text="Bina OCR (OCR)", variable=self.engine_var, value="bina").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="pdf-inspector (Parser)", variable=self.engine_var, value="inspector").grid(row=1, column=2, sticky="w", padx=(16, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="Windows OCR (oneocr)", variable=self.engine_var, value="oneocr").grid(row=1, column=3, sticky="w", padx=(16, 0), pady=(6, 0))
+        self.engine_var = tk.StringVar(value="oneocr")
+        ttk.Radiobutton(opt_frame, text="Windows OCR (oneocr) - fastest, recommended", variable=self.engine_var, value="oneocr").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="Bina OCR (OCR)", variable=self.engine_var, value="bina").grid(row=1, column=2, sticky="w", padx=(16, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="pdf-inspector (Parser)", variable=self.engine_var, value="inspector").grid(row=1, column=3, sticky="w", padx=(16, 0), pady=(6, 0))
 
         ttk.Label(opt_frame, text="Device:").grid(row=2, column=0, sticky="w", pady=(6, 0))
         self.device_var = tk.StringVar(value="cuda" if torch.cuda.is_available() else "cpu")
