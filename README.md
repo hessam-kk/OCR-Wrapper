@@ -8,11 +8,11 @@ Batch OCR extraction using [Reza2kn/Bina-0.1](https://huggingface.co/Reza2kn/Bin
 
 - **PDF input** — renders pages at configurable DPI via PyMuPDF
 - **Image folder input** — processes sorted image files (jpg, png, webp, etc.)
-- **Two engines** — `bina` (vision-model OCR, handles scanned/images) or `pdf-inspector` (instant text extraction for text-based PDFs)
+- **Three engines** — `bina` (vision-model OCR, handles scanned/images), `pdf-inspector` (instant text extraction for text-based PDFs), or `oneocr` (Windows Snipping Tool OCR)
 - **Tkinter GUI** — file pickers, progress bar, live log, engine + GPU/CPU selectors (launches by default with no args)
 - **CLI mode** — for scripting and batch runs
 - **CPU fallback** — `--cpu` flag, or GPU/CPU selector in the GUI
-- **Modular code** — split into `model.py`, `pages.py`, `ocr.py`, `inspector.py`, `gui.py` around the `book_ocr_batch.py` entry point
+- **Modular code** — split into `model.py`, `pages.py`, `ocr.py`, `inspector.py`, `windows_ocr.py`, `gui.py` around the `book_ocr_batch.py` entry point
 - **Model check before download** — shows cache status and repo size, asks before downloading
 
 ## Requirements
@@ -52,6 +52,12 @@ Fast text extraction of a text-based PDF (no OCR, no model download):
 python book_ocr_batch.py --pdf book.pdf --engine inspector --output_file transcript.md
 ```
 
+Windows Snipping Tool OCR (high accuracy, fully offline — needs model files, see Notes):
+
+```bash
+python book_ocr_batch.py --pdf book.pdf --engine oneocr --output_file transcript.md
+```
+
 ### CLI — Image folder
 
 ```bash
@@ -67,7 +73,7 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 | `--output_file` | `book_transcript.md` | Transcript output path |
 | `--max_new_tokens` | `1024` | Max tokens generated per page |
 | `--limit` | all | Process only first N pages |
-| `--engine` | `bina` | `bina` (vision OCR) or `inspector` (pdf-inspector, PDF only) |
+| `--engine` | `bina` | `bina` (vision OCR), `inspector` (pdf-inspector, PDF only) or `oneocr` (Windows OCR) |
 | `--cpu` | off | Force CPU even if GPU is available |
 | `--gui` | — | Launch GUI explicitly |
 
@@ -98,6 +104,44 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 > سایهٔ پدر بر سرش نبوده و در شهر کوچک وانگانویی، بزرگ شده و
 
 > The screenshot above shows the rendered output — [full transcript](book_transcript.md).
+
+## oneocr setup (Windows Snipping Tool OCR)
+
+The `oneocr` engine is the same high-accuracy OCR model used by Windows Snipping Tool's "Text actions" — Windows-only, fully offline, and typically faster and more accurate than classic OCR libraries. The pip package is just a wrapper; the model itself ships inside the Snipping Tool app, so it needs a one-time manual setup.
+
+**1. Install the wrapper**
+
+```bash
+pip install oneocr
+```
+
+**2. Get the model files** (`oneocr.dll`, `oneocr.onemodel`, `onnxruntime.dll`)
+
+The package doesn't ship them — they live inside the Snipping Tool app package. The easiest way to get them without fighting Windows' locked `WindowsApps` folder permissions:
+
+- Go to [store.rg-adguard.net](https://store.rg-adguard.net), paste in `https://apps.microsoft.com/detail/9mz95kl8mr0l` (Snipping Tool's store link), and download the newest `Microsoft.ScreenSketch` `.msixbundle`
+- Rename it to `.zip` and extract it
+- Extract the inner `SnippingToolApp` `.msix` for your CPU arch (`x64` for AMD64, `ARM64` for ARM) the same way — a `.msix` is also just a zip
+- The three files are in the resulting `SnippingTool` folder
+
+**3. Drop them into place**
+
+```bash
+mkdir "%USERPROFILE%\.config\oneocr"
+copy extracted\SnippingTool\oneocr.dll "%USERPROFILE%\.config\oneocr\"
+copy extracted\SnippingTool\oneocr.onemodel "%USERPROFILE%\.config\oneocr\"
+copy extracted\SnippingTool\onnxruntime.dll "%USERPROFILE%\.config\oneocr\"
+```
+
+That's it — `oneocr.OcrEngine()` picks the files up automatically. To verify:
+
+```bash
+python -c "from windows_ocr import get_ocr_engine; get_ocr_engine(); print('oneocr ready')"
+```
+
+**Alternative (often locked):** if Snipping Tool is installed, locate its live install folder with `Get-AppxPackage Microsoft.ScreenSketch | Select-Object -ExpandProperty InstallLocation` and copy the three files from its `SnippingTool` subfolder. `WindowsApps` is locked down by the OS, so if you hit permission errors, fall back to the extraction method above.
+
+> **Note:** the `oneocr` engine uses a model extracted from Microsoft's proprietary Snipping Tool — check licensing before distributing.
 
 ## Notes
 
