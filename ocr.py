@@ -280,7 +280,17 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
     # would flatten to literal text and calibre's splitter would find no legal
     # split points (SplitError on large books). Use per-paragraph HTML tags;
     # markdown stays parseable outside them. No "## Page N" markers — the
-    # output is a clean continuous document.
+    # output is a clean continuous document. Invisible page breaks between
+    # pages give calibre split points (so azw3 doesn't hit "Could not find
+    # chunk for aid" on single-file epubs) without visible page labels.
+    #
+    # Kindle e-ink doesn't do Arabic contextual shaping, so Persian text is
+    # pre-shaped into joined presentation forms for the ebook outputs only.
+    # The .md/txt stay canonical (searchable); this reshaping is expected to
+    # make the ebook variant non-searchable — accepted trade-off.
+    reshaped = direction == "rtl" and _reshape_persian
+
+    PAGE_BREAK = '<div style="page-break-before:always"></div>'
     ebook_parts = []
     for text in texts:
         if text.startswith("[ERROR"):
@@ -289,9 +299,11 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
         paras = [p.strip() for p in text.split("\n\n") if p.strip()]
         if not paras:
             continue
+        if reshaped:
+            paras = [_reshape_persian(p) for p in paras]
         joined = "\n\n".join(f'<p dir="{direction}">{p}</p>' for p in paras)
         ebook_parts.append(joined)
-    ebook_body = "\n\n".join(ebook_parts) + "\n"
+    ebook_body = f"\n\n{PAGE_BREAK}\n\n".join(ebook_parts) + "\n"
 
     if "md" in requested or {"epub", "pdf", "azw3"} & requested:
         md_path.write_text(md_body, encoding="utf-8")
@@ -325,6 +337,33 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
     if "azw3" in requested:
         _convert(epub_path, output_base.with_suffix(".azw3"), log,
                  "--title", title)
+
+
+def _reshape_persian(text: str) -> str:
+    """Convert Persian text to pre-joined presentation forms for Kindle.
+
+    Only Arabic-script runs are reshaped; Latin/digits/markup pass through.
+    """
+    import arabic_reshaper
+
+    ARABIC = ("؀", "ۿ")
+
+    def reshape_run(run):
+        return arabic_reshaper.reshape(run) if any(ARABIC[0] <= c <= ARABIC[1] for c in run) else run
+
+    out = []
+    buf = []
+    for ch in text:
+        if ARABIC[0] <= ch <= ARABIC[1]:
+            buf.append(ch)
+        else:
+            if buf:
+                out.append(reshape_run("".join(buf)))
+                buf = []
+            out.append(ch)
+    if buf:
+        out.append(reshape_run("".join(buf)))
+    return "".join(out)
 
 
 def _convert(src, dst, log, *extra_args):
