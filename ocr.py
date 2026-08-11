@@ -1,5 +1,6 @@
 """OCR transcription: single page inference, the batch loop, and output export."""
 
+import json
 import subprocess
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
@@ -11,6 +12,41 @@ from PIL import Image
 PROMPT_TEXT = "Transcribe all text in this image exactly as it appears."
 FORMATS = ("md", "pdf", "azw3", "epub", "txt")
 PDF_SERIF_FAMILY = "Segoe UI"  # covers Persian glyphs for calibre PDF export
+
+# Sentence-ending punctuation (after stripping trailing closing quotes etc.).
+# Used to decide whether a page boundary cut a paragraph mid-sentence.
+TERMINAL_PUNCT = (".", "!", "؟", "…")
+TRAILING_WRAPPERS = ('"', "'", "»", ")", "”", "’")
+
+
+def _looks_like_paragraph_end(text: str) -> bool:
+    text = text.rstrip()
+    while text and text[-1] in TRAILING_WRAPPERS:
+        text = text[:-1]
+    return bool(text) and text[-1] in TERMINAL_PUNCT
+
+
+def _merge_pages(texts):
+    """Turn per-page OCR text into a flat paragraph list, merging any
+    paragraph that a page boundary cut mid-sentence. Returns
+    (paragraphs, page_breaks) where page_breaks is the set of paragraph
+    indices at which a new physical page genuinely begins."""
+    paragraphs, page_breaks = [], set()
+    for text in texts:
+        if text.startswith("[ERROR"):
+            paragraphs.append(text)
+            page_breaks.add(len(paragraphs) - 1)
+            continue
+        page_paras = [p.strip() for p in text.split("\n\n") if p.strip()]
+        if not page_paras:
+            continue
+        if paragraphs and not paragraphs[-1].startswith("[ERROR") and not _looks_like_paragraph_end(paragraphs[-1]):
+            paragraphs[-1] = paragraphs[-1].rstrip() + " " + page_paras[0]
+            page_paras = page_paras[1:]
+        else:
+            page_breaks.add(len(paragraphs))
+        paragraphs.extend(page_paras)
+    return paragraphs, page_breaks
 
 
 def transcribe_page(processor, model, image_path: Path, max_new_tokens: int) -> str:
@@ -258,20 +294,30 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
     requested = set(formats)
 
     md_path = output_base.with_suffix(".md")
+    pagemap_path = output_base.with_suffix(".pagemap.json")
     if texts is None:
-        # Re-export from an existing markdown (skip OCR).
+        # Re-export from an existing markdown (skip OCR). Paragraph boundaries
+        # are recovered from the file's blank lines; physical page boundaries
+        # come from the sidecar written on the original OCR run. Without it
+        # (old .md files), no page breaks are inserted.
         if not md_path.exists():
             raise FileNotFoundError(f"Skip-OCR requested but {md_path.name} does not exist")
         md_body = md_path.read_text(encoding="utf-8")
         body = md_body
         if md_body.startswith('<div dir="rtl">'):
             body = md_body.replace('<div dir="rtl">', "").replace("</div>", "").strip()
-        texts = [p.strip() for p in body.split("\n\n") if p.strip() and not p.strip().startswith("## Page")]
-        if not texts:
-            texts = [body]
+        paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
+        if not paragraphs:
+            paragraphs = [body]
+        if pagemap_path.exists():
+            page_breaks = set(json.loads(pagemap_path.read_text(encoding="utf-8")))
+        else:
+            page_breaks = set()
     else:
-        body = "\n\n".join(texts).strip() + "\n"
+        paragraphs, page_breaks = _merge_pages(texts)
+        body = "\n\n".join(paragraphs).strip() + "\n"
         md_body = body
+        pagemap_path.write_text(json.dumps(sorted(page_breaks)), encoding="utf-8")
     if direction == "rtl" and not md_body.startswith("<div"):
         md_body = '<div dir="rtl">\n\n' + md_body + "</div>\n"
 
@@ -280,9 +326,9 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
     # would flatten to literal text and calibre's splitter would find no legal
     # split points (SplitError on large books). Use per-paragraph HTML tags;
     # markdown stays parseable outside them. No "## Page N" markers — the
-    # output is a clean continuous document. Invisible page breaks between
-    # pages give calibre split points (so azw3 doesn't hit "Could not find
-    # chunk for aid" on single-file epubs) without visible page labels.
+    # output is a clean continuous document. Invisible page breaks at genuine
+    # page starts give calibre split points (so azw3 doesn't hit "Could not
+    # find chunk for aid" on single-file epubs) without visible page labels.
     #
     # Kindle e-ink doesn't do Arabic contextual shaping, so Persian text is
     # pre-shaped into joined presentation forms for the ebook outputs only.
@@ -292,18 +338,12 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
 
     PAGE_BREAK = '<div style="page-break-before:always"></div>'
     ebook_parts = []
-    for text in texts:
-        if text.startswith("[ERROR"):
-            ebook_parts.append(text)
-            continue
-        paras = [p.strip() for p in text.split("\n\n") if p.strip()]
-        if not paras:
-            continue
-        if reshaped:
-            paras = [_reshape_persian(p) for p in paras]
-        joined = "\n\n".join(f'<p dir="{direction}">{p}</p>' for p in paras)
-        ebook_parts.append(joined)
-    ebook_body = f"\n\n{PAGE_BREAK}\n\n".join(ebook_parts) + "\n"
+    for i, p in enumerate(paragraphs):
+        if i in page_breaks and i > 0:
+            ebook_parts.append(PAGE_BREAK)
+        tag = _reshape_persian(p) if reshaped else p
+        ebook_parts.append(f'<p dir="{direction}">{tag}</p>')
+    ebook_body = "\n\n".join(ebook_parts) + "\n"
 
     if "md" in requested or {"epub", "pdf", "azw3"} & requested:
         md_path.write_text(md_body, encoding="utf-8")
@@ -375,3 +415,25 @@ def _convert(src, dst, log, *extra_args):
         text=True,
     )
     log(f"Wrote {dst.name}")
+
+
+if __name__ == "__main__":
+    # Page boundary cuts a sentence in two -> merged into one paragraph.
+    p, pb = _merge_pages([
+        "می‌خواستم به تو چیزی",
+        "بگویم که مهم بود.",
+        "[ERROR: page skipped]",
+        "این پاراگراف کامل است.",
+    ])
+    assert p == ["می‌خواستم به تو چیزی بگویم که مهم بود.", "[ERROR: page skipped]", "این پاراگراف کامل است."], p
+    # paragraph 0 starts page 1 and absorbs page 2 (cut mid-sentence, no
+    # break marker); the ERROR marker starts page 3; the last paragraph
+    # starts page 4.
+    assert pb == {0, 1, 2}, pb
+    # Page boundary falls at a paragraph end -> kept, marked as a break.
+    p, pb = _merge_pages(["جمله تمام شده است.", "جمله بعدی."])
+    assert p == ["جمله تمام شده است.", "جمله بعدی."] and pb == {0, 1}, (p, pb)
+    assert not _looks_like_paragraph_end("می‌خواستم به تو چیزی")
+    assert _looks_like_paragraph_end("تمام شد.")
+    assert _looks_like_paragraph_end('گفت: "تمام شد".')
+    print("merge_pages self-check OK")
