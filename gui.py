@@ -3,6 +3,7 @@
 import itertools
 import tempfile
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
@@ -11,7 +12,7 @@ import torch
 
 from model import MODEL_ID, load_model, model_cache_info, repo_size_gb, write_inspector_transcript
 from normalize import get_normalizer, normalize_transcribe
-from ocr import FORMATS, run_ocr_pages, transcribe_page
+from ocr import FORMATS, run_ocr_pages, transcribe_page, write_outputs
 from pages import PDF_DPI, get_page_images, get_pdf_images
 from chrome_ocr_engine import chrome_transcribe_page, get_screenai_engine
 from windows_ocr import get_ocr_engine, oneocr_transcribe_page
@@ -128,6 +129,8 @@ class OCRApp:
         btn_frame = ttk.Frame(root, padding=(10, 0, 10, 10))
         btn_frame.pack(fill="x")
 
+        self.timer_label = ttk.Label(btn_frame, text="0s")
+        self.timer_label.pack(side="left")
         self.start_btn = ttk.Button(btn_frame, text="Start OCR", command=self._start)
         self.start_btn.pack(side="right")
         self.stop_btn = ttk.Button(btn_frame, text="Stop", command=self._stop, state="disabled")
@@ -195,12 +198,26 @@ class OCRApp:
         self.status_label.configure(text="Loading model...")
         self._log("Starting OCR...")
 
+        self._start_time = time.time()
+        self._tick_timer()
+
         threading.Thread(target=self._run_ocr, daemon=True).start()
+
+    def _tick_timer(self):
+        if not self.running:
+            return
+        self.timer_label.configure(text=f"{int(time.time() - self._start_time)}s")
+        self.root.after(1000, self._tick_timer)
 
     def _stop(self):
         self.running = False
+        self._finalize_timer()
         self._log("Stopping after current page...")
         self.stop_btn.configure(state="disabled")
+
+    def _finalize_timer(self):
+        if hasattr(self, "_start_time"):
+            self.timer_label.configure(text=f"{int(time.time() - self._start_time)}s")
 
     def _run_ocr(self):
         try:
@@ -212,10 +229,9 @@ class OCRApp:
                 output_base = self._output_base()
                 formats = [f for f, v in self.format_vars.items() if v.get()]
                 self.root.after(0, lambda: self.status_label.configure(text="Re-exporting..."))
-                run_ocr_pages(lambda p: None, [], output_base, formats,
-                              direction=self.direction_var.get(),
-                              workers=1,
-                              log=lambda m: self.root.after(0, lambda s=m: self._log(s)))
+                write_outputs(None, output_base, formats,
+                              log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
+                              direction=self.direction_var.get())
                 self.root.after(0, lambda: self.status_label.configure(text="Done"))
                 return
 
@@ -342,6 +358,7 @@ class OCRApp:
         finally:
             self.running = False
             self.root.after(0, lambda: (
+                self._finalize_timer(),
                 self.start_btn.configure(state="normal"),
                 self.stop_btn.configure(state="disabled"),
             ))

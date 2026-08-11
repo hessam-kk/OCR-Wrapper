@@ -272,18 +272,17 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
     else:
         body = "\n\n".join(texts).strip() + "\n"
         md_body = body
-    if texts is not None and direction == "rtl" and not md_body.startswith("<div"):
+    if direction == "rtl" and not md_body.startswith("<div"):
         md_body = '<div dir="rtl">\n\n' + md_body + "</div>\n"
-    if direction == "rtl":
-        md_body = '<div dir="rtl">\n\n' + body + "</div>\n"
 
     # The ebook body must NOT be wrapped in a single raw-HTML div: markdown
-    # inside a raw HTML block is not parsed, so "## Page" headings and
-    # paragraph breaks would flatten to literal text and calibre's splitter
-    # would find no legal split points (SplitError on large books). Use
-    # per-paragraph HTML tags instead; markdown stays parseable outside them.
+    # inside a raw HTML block is not parsed, so headings and paragraph breaks
+    # would flatten to literal text and calibre's splitter would find no legal
+    # split points (SplitError on large books). Use per-paragraph HTML tags;
+    # markdown stays parseable outside them. No "## Page N" markers — the
+    # output is a clean continuous document.
     ebook_parts = []
-    for i, text in enumerate(texts):
+    for text in texts:
         if text.startswith("[ERROR"):
             ebook_parts.append(text)
             continue
@@ -291,7 +290,7 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
         if not paras:
             continue
         joined = "\n\n".join(f'<p dir="{direction}">{p}</p>' for p in paras)
-        ebook_parts.append(f"## Page {i + 1}\n\n{joined}")
+        ebook_parts.append(joined)
     ebook_body = "\n\n".join(ebook_parts) + "\n"
 
     if "md" in requested or {"epub", "pdf", "azw3"} & requested:
@@ -306,11 +305,17 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
         log(f"Wrote {txt_path.name}")
 
     if {"epub", "pdf", "azw3"} & requested:
+        # Feed calibre a minimal HTML shell with document-level RTL + fa
+        # so Kindle/readers shape Persian correctly (letters join instead
+        # of appearing separated). The per-paragraph <p dir> tags stay.
         ebook_md_path = output_base.with_suffix(".ebook.md")
-        ebook_md_path.write_text(ebook_body, encoding="utf-8")
+        ebook_html = (
+            '<!DOCTYPE html>\n<html dir="rtl" lang="fa">\n<body>\n'
+            + ebook_body
+            + "</body>\n</html>\n"
+        )
+        ebook_md_path.write_text(ebook_html, encoding="utf-8")
         epub_path = output_base.with_suffix(".epub")
-        # Headings + paragraph tags give calibre legal split points; the
-        # default 260KB flow-size now splits properly instead of SplitError.
         _convert(ebook_md_path, epub_path, log, "--title", title)
 
     if "pdf" in requested:
