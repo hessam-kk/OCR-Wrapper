@@ -98,15 +98,15 @@ class OCRApp:
         ttk.Radiobutton(opt_frame, text="CPU", variable=self.device_var, value="cpu").grid(row=2, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
 
         self.normalize_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(opt_frame, text="Normalize", variable=self.normalize_var).grid(row=3, column=0, sticky="w", pady=(6, 0))
+        ttk.Checkbutton(opt_frame, text="Normalize Persian (half-space)", variable=self.normalize_var).grid(row=3, column=0, sticky="w", pady=(6, 0))
 
-        ttk.Label(opt_frame, text="Workers:").grid(row=3, column=1, sticky="w", padx=(8, 0), pady=(6, 0))
+        ttk.Label(opt_frame, text="Workers:").grid(row=3, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
         self.workers_var = tk.IntVar(value=1)
         ttk.Spinbox(opt_frame, from_=1, to=8, textvariable=self.workers_var, width=3).grid(row=3, column=2, sticky="w", padx=(0, 0), pady=(6, 0))
 
-        ttk.Label(opt_frame, text="Dir:").grid(row=3, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
+        ttk.Label(opt_frame, text="Dir:").grid(row=3, column=3, sticky="w", padx=(4, 0), pady=(6, 0))
         self.direction_var = tk.StringVar(value="rtl")
-        ttk.Radiobutton(opt_frame, text="RTL", variable=self.direction_var, value="rtl").grid(row=3, column=4, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="RTL", variable=self.direction_var, value="rtl").grid(row=3, column=4, sticky="w", padx=(2, 0), pady=(6, 0))
         ttk.Radiobutton(opt_frame, text="LTR", variable=self.direction_var, value="ltr").grid(row=3, column=5, sticky="w", padx=(2, 0), pady=(6, 0))
 
         # --- Progress ---
