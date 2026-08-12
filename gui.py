@@ -87,10 +87,10 @@ class OCRApp:
 
         ttk.Label(opt_frame, text="Engine:").grid(row=1, column=0, sticky="w", pady=(6, 0))
         self.engine_var = tk.StringVar(value="chrome")
-        ttk.Radiobutton(opt_frame, text="Chrome OCR (Screen AI) - best", variable=self.engine_var, value="chrome").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="Windows OCR (oneocr)", variable=self.engine_var, value="oneocr").grid(row=1, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="bina (vision OCR)", variable=self.engine_var, value="bina").grid(row=1, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="pdf-inspector (Parser)", variable=self.engine_var, value="inspector").grid(row=1, column=4, sticky="w", padx=(8, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="Chrome (Screen AI)", variable=self.engine_var, value="chrome").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="Windows (oneocr)", variable=self.engine_var, value="oneocr").grid(row=1, column=2, sticky="w", padx=(6, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="bina (OCR)", variable=self.engine_var, value="bina").grid(row=1, column=3, sticky="w", padx=(6, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="pdf-inspector", variable=self.engine_var, value="inspector").grid(row=1, column=4, sticky="w", padx=(6, 0), pady=(6, 0))
 
         ttk.Label(opt_frame, text="Device:").grid(row=2, column=0, sticky="w", pady=(6, 0))
         self.device_var = tk.StringVar(value="cuda" if torch.cuda.is_available() else "cpu")
@@ -100,14 +100,18 @@ class OCRApp:
         self.normalize_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(opt_frame, text="Normalize Persian (half-space)", variable=self.normalize_var).grid(row=3, column=0, sticky="w", pady=(6, 0))
 
-        ttk.Label(opt_frame, text="Workers:").grid(row=3, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
+        worker_frame = ttk.Frame(opt_frame)
+        worker_frame.grid(row=3, column=1, sticky="w", pady=(6, 0))
         self.workers_var = tk.IntVar(value=1)
-        ttk.Spinbox(opt_frame, from_=1, to=8, textvariable=self.workers_var, width=3).grid(row=3, column=2, sticky="w", padx=(0, 0), pady=(6, 0))
+        ttk.Label(worker_frame, text="Workers:").pack(side="left")
+        ttk.Spinbox(worker_frame, from_=1, to=8, textvariable=self.workers_var, width=3).pack(side="left")
 
-        ttk.Label(opt_frame, text="Dir:").grid(row=3, column=3, sticky="w", padx=(4, 0), pady=(6, 0))
+        dir_frame = ttk.Frame(opt_frame)
+        dir_frame.grid(row=3, column=2, sticky="w", pady=(6, 0))
         self.direction_var = tk.StringVar(value="rtl")
-        ttk.Radiobutton(opt_frame, text="RTL", variable=self.direction_var, value="rtl").grid(row=3, column=4, sticky="w", padx=(2, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="LTR", variable=self.direction_var, value="ltr").grid(row=3, column=5, sticky="w", padx=(2, 0), pady=(6, 0))
+        ttk.Label(dir_frame, text="Dir:").pack(side="left")
+        ttk.Radiobutton(dir_frame, text="RTL", variable=self.direction_var, value="rtl").pack(side="left")
+        ttk.Radiobutton(dir_frame, text="LTR", variable=self.direction_var, value="ltr").pack(side="left")
 
         # --- Progress ---
         prog_frame = ttk.Frame(root, padding=8)
