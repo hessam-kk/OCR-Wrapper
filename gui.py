@@ -21,7 +21,7 @@ from windows_ocr import get_ocr_engine, oneocr_transcribe_page
 class OCRApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Bina OCR Batch")
+        self.root.title("OCR-Wrapper")
         self.root.geometry("820x700")
         self.root.resizable(True, True)
 
@@ -89,7 +89,7 @@ class OCRApp:
         self.engine_var = tk.StringVar(value="chrome")
         ttk.Radiobutton(opt_frame, text="Chrome OCR (Screen AI) - best", variable=self.engine_var, value="chrome").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
         ttk.Radiobutton(opt_frame, text="Windows OCR (oneocr)", variable=self.engine_var, value="oneocr").grid(row=1, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
-        ttk.Radiobutton(opt_frame, text="Bina OCR (OCR)", variable=self.engine_var, value="bina").grid(row=1, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
+        ttk.Radiobutton(opt_frame, text="bina (vision OCR)", variable=self.engine_var, value="bina").grid(row=1, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
         ttk.Radiobutton(opt_frame, text="pdf-inspector (Parser)", variable=self.engine_var, value="inspector").grid(row=1, column=4, sticky="w", padx=(8, 0), pady=(6, 0))
 
         ttk.Label(opt_frame, text="Device:").grid(row=2, column=0, sticky="w", pady=(6, 0))
@@ -237,7 +237,7 @@ class OCRApp:
 
             if engine == "inspector":
                 if input_type != "pdf":
-                    self.root.after(0, lambda: messagebox.showerror("Error", "pdf-inspector only processes PDF files. Pick a PDF or switch to Bina OCR."))
+                    self.root.after(0, lambda: messagebox.showerror("Error", "pdf-inspector only processes PDF files. Pick a PDF or switch to bina."))
                     return
                 if not input_path.is_file():
                     self.root.after(0, lambda: messagebox.showerror("Error", f"PDF not found: {input_path}"))
