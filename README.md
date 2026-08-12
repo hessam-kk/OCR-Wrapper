@@ -1,19 +1,24 @@
-# Bina OCR
+# OCR-Wrapper
 
 Batch OCR extraction using [Reza2kn/Bina-0.1](https://huggingface.co/Reza2kn/Bina-0.1) — a Persian OCR vision-language model (~0.7B params).
 
-![Bina OCR GUI](images/ocr%20preview%201.png)
+![OCR-Wrapper GUI](images/ocr%20preview%201.png)
 
 ## Features
 
-- **PDF input** — renders pages at configurable DPI via PyMuPDF
-- **Image folder input** — processes sorted image files (jpg, png, webp, etc.)
+- **PDF input** — renders pages lazily at configurable DPI via PyMuPDF (300 DPI default)
+- **Image folder input** — processes sorted image files (jpg, png, webp, bmp, tif, etc.)
 - **Four engines** — `bina` (vision-model OCR, handles scanned/images), `pdf-inspector` (instant text extraction for text-based PDFs), `oneocr` (Windows Snipping Tool OCR), or `chrome` (Chrome/Edge Screen AI OCR)
+- **Multi-format export** — Markdown, plain text, and ebooks (`md` `txt` `epub` `pdf` `azw3`; `epub`/`pdf`/`azw3` go through calibre's `ebook-convert`)
+- **Clean continuous output** — paragraphs are stitched across page boundaries so an OCR-split sentence doesn't break the reading flow; a `.pagemap.json` sidecar records real page breaks
 - **Persian normalization** — optional hazm post-processing that reinserts half-spaces (ZWNJ) and unifies glyphs/digits, which OCR models often drop
-- **Tkinter GUI** — file pickers, progress bar, live log, engine + GPU/CPU selectors (launches by default with no args)
+- **Kindle-ready Persian** — ebook outputs pre-shape Arabic-script runs into joined presentation forms (via arabic-reshaper) so Kindle e-ink renders the script correctly
+- **Parallel workers** — optionally OCR pages concurrently (threads; the chrome engine uses processes since its DLL isn't thread-safe)
+- **Skip OCR** — re-export an existing transcript to other formats without re-running the model
+- **Tkinter GUI** — file pickers, format checkboxes, progress bar, live log, engine + GPU/CPU/DPI/workers/direction selectors (launches by default with no args)
 - **CLI mode** — for scripting and batch runs
 - **CPU fallback** — `--cpu` flag, or GPU/CPU selector in the GUI
-- **Modular code** — split into `model.py`, `pages.py`, `ocr.py`, `inspector.py`, `windows_ocr.py`, `gui.py` around the `book_ocr_batch.py` entry point
+- **Modular code** — split into `model.py`, `pages.py`, `ocr.py`, `inspector.py`, `windows_ocr.py`, `chrome_ocr_engine.py`, `normalize.py`, `gui.py` around the `book_ocr_batch.py` entry point
 - **Model check before download** — shows cache status and repo size, asks before downloading
 
 ## Requirements
@@ -33,6 +38,8 @@ pip install -r requirements.txt
 > pip install --force-reinstall git+https://github.com/huggingface/transformers.git
 > ```
 
+> **Note:** exporting `epub`/`pdf`/`azw3` requires [calibre](https://calibre-ebook.com/) (`ebook-convert` on PATH).
+
 ## Usage
 
 ### GUI (default)
@@ -44,37 +51,57 @@ python book_ocr_batch.py
 ### CLI — PDF
 
 ```bash
-python book_ocr_batch.py --pdf book.pdf --output_file transcript.md
+python book_ocr_batch.py --pdf book.pdf --output_file transcript
 ```
 
 Fast text extraction of a text-based PDF (no OCR, no model download):
 
 ```bash
-python book_ocr_batch.py --pdf book.pdf --engine inspector --output_file transcript.md
+python book_ocr_batch.py --pdf book.pdf --engine inspector --output_file transcript
 ```
 
 Windows Snipping Tool OCR (high accuracy, fully offline — needs model files, see [oneocr setup](#oneocr-setup-windows-snipping-tool-ocr)):
 
 ```bash
-python book_ocr_batch.py --pdf book.pdf --engine oneocr --output_file transcript.md
+python book_ocr_batch.py --pdf book.pdf --engine oneocr --output_file transcript
 ```
 
 With Persian normalization (reinserts half-spaces/ZWNJ that OCR models often drop — recommended for Persian text):
 
 ```bash
-python book_ocr_batch.py --pdf book.pdf --engine oneocr --normalize --output_file transcript.md
+python book_ocr_batch.py --pdf book.pdf --engine oneocr --normalize --output_file transcript
 ```
 
 Chrome/Edge Screen AI OCR (offline, layout-aware — needs setup, see Notes):
 
 ```bash
-python book_ocr_batch.py --pdf book.pdf --engine chrome --output_file transcript.md
+python book_ocr_batch.py --pdf book.pdf --engine chrome --output_file transcript
 ```
 
 ### CLI — Image folder
 
 ```bash
-python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
+python book_ocr_batch.py --input_dir ./pages --output_file transcript
+```
+
+### Exporting to multiple formats
+
+`--output_file` is a base name; an extension is added per selected format. `epub`/`pdf`/`azw3` need calibre and build on each other (md → epub → pdf/azw3):
+
+```bash
+python book_ocr_batch.py --pdf book.pdf --formats md txt epub azw3 --output_file transcript
+```
+
+Spread the page load across workers (2-8; `bina` stays single-device, `chrome` uses processes):
+
+```bash
+python book_ocr_batch.py --pdf book.pdf --engine chrome --workers 4 --output_file transcript
+```
+
+Re-export an existing markdown transcript without re-running OCR:
+
+```bash
+python book_ocr_batch.py --skip-ocr --output_file transcript --formats epub azw3
 ```
 
 ### Options
@@ -83,17 +110,24 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 |------|---------|-------------|
 | `--pdf` | — | Path to PDF file |
 | `--input_dir` | — | Folder of page images |
-| `--output_file` | `book_transcript.md` | Transcript output path |
-| `--max_new_tokens` | `1024` | Max tokens generated per page |
+| `--output_file` | `book_transcript` | Output base name (extension added per format) |
+| `--formats` | `md` | Output formats: `md` `txt` `epub` `pdf` `azw3` (ebook formats need calibre) |
+| `--direction` | `rtl` | Text direction of the exported output (`rtl`/`ltr`) |
+| `--max_new_tokens` | `1024` | Max tokens generated per page (bina) |
 | `--limit` | all | Process only first N pages |
 | `--engine` | `bina` | `bina` (vision OCR), `inspector` (pdf-inspector, PDF only), `oneocr` (Windows OCR) or `chrome` (Chrome Screen AI) |
+| `--workers` | `1` | Parallel page workers (2-8; bina stays 1, chrome uses processes) |
 | `--normalize` | off | Normalize Persian text with hazm (reinserts half-spaces/ZWNJ) |
+| `--skip-ocr` | off | Skip OCR and re-export the existing `.md` to the selected formats |
 | `--cpu` | off | Force CPU even if GPU is available |
 | `--gui` | — | Launch GUI explicitly |
 
 ## Output
 
-- **Transcript** — Markdown file with `## Page N: filename` sections
+- **Markdown** — a clean continuous document with paragraphs merged across page boundaries (no `## Page N` markers), wrapped in `<div dir="rtl">` for renderers
+- **Formats** — `md`/`txt` are written directly; `epub`/`pdf`/`azw3` are produced via calibre (`ebook-convert`)
+- **Sidecar** — a `.pagemap.json` file records real page-break indices so re-exports via `--skip-ocr` keep the page structure
+- **Kindle** — `epub`/`azw3` output is pre-shaped Arabic-script Persian for e-ink; the `.md`/`.txt` stay canonical and searchable
 
 ### Sample result (page 1 of «۱» , RTL Persian)
 
@@ -116,8 +150,6 @@ python book_ocr_batch.py --input_dir ./pages --output_file transcript.md
 > تحصیلات دانشگاهی.
 > راستش را بخواهید حتی دبیرستان را هم تمام نکرده.
 > سایهٔ پدر بر سرش نبوده و در شهر کوچک وانگانویی، بزرگ شده و
-
-> The screenshot above shows the rendered output — [full transcript](book_transcript.md).
 
 ## oneocr setup (Windows Snipping Tool OCR)
 
@@ -161,9 +193,9 @@ python -c "from windows_ocr import get_ocr_engine; get_ocr_engine(); print('oneo
 
 - Model is cached locally after first download (~1.3GB); the tool checks the cache and asks before downloading
 - pdf-inspector is instant (<1s) but only handles text-based PDFs — scanned pages need the `bina` engine
-- oneocr does not emit U+200C (ZWNJ) — the `--normalize` flag fixes half-spaces (`می‌رود`) and unifies digits/glyphs via [hazm](https://github.com/sobhe/hazm); works with any engine
+- oneocr does not emit U+200C (ZWNJ) — the `--normalize` flag fixes half-spaces (`می‌رود`) and unifies digits/glyphs via [hazm](https://github.com/sobhe/hazm); works with any engine. In the GUI, normalization is on by default
 - `chrome` engine needs [chrome-ocr](https://github.com/ayismas/chrome-ocr) installed from source (`git clone https://github.com/ayismas/chrome-ocr && cd chrome-ocr && pip install -e ".[pdf]"`), plus the Screen AI DLL: open Chrome → Settings → Accessibility, enable a screen-reader option, and confirm `chrome_screen_ai.dll` lands in `%LOCALAPPDATA%\Google\Chrome\User Data\screen_ai\` (run `chrome-ocr doctor` to verify). Edge's DLL lives at a different path — the wrapper only auto-detects Chrome's, but `ScreenAIEngine(dll_path=...)` accepts a custom path. Windows-only; DLL subject to Google's terms
-- 150 DPI is default for PDF rendering; raise for better accuracy, lower for speed
+- 300 DPI is default for PDF rendering; raise for better accuracy, lower for speed
 - Expect minutes/page on low-end GPUs; ~10-30s/page on a proper GPU
 - `torch.cuda.empty_cache()` runs every 10 pages for low-VRAM GPUs
 - Stop button (GUI) / Ctrl-C (CLI) stops after the current page
