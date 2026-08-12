@@ -102,7 +102,7 @@ class OCRApp:
 
         ttk.Label(opt_frame, text="Workers:").grid(row=3, column=1, sticky="w", padx=(8, 0), pady=(6, 0))
         self.workers_var = tk.IntVar(value=1)
-        ttk.Spinbox(opt_frame, from_=1, to=8, textvariable=self.workers_var, width=3).grid(row=3, column=2, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Spinbox(opt_frame, from_=1, to=8, textvariable=self.workers_var, width=3).grid(row=3, column=2, sticky="w", padx=(0, 0), pady=(6, 0))
 
         ttk.Label(opt_frame, text="Dir:").grid(row=3, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
         self.direction_var = tk.StringVar(value="rtl")
