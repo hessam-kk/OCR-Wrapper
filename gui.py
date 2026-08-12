@@ -101,7 +101,7 @@ class OCRApp:
         ttk.Checkbutton(opt_frame, text="Normalize Persian (half-space)", variable=self.normalize_var).grid(row=3, column=0, sticky="w", pady=(6, 0))
 
         worker_frame = ttk.Frame(opt_frame)
-        worker_frame.grid(row=3, column=1, sticky="w", pady=(6, 0))
+        worker_frame.grid(row=3, column=1, sticky="w", padx=(30, 0), pady=(6, 0))
         self.workers_var = tk.IntVar(value=1)
         ttk.Label(worker_frame, text="Workers:").pack(side="left")
         ttk.Spinbox(worker_frame, from_=1, to=8, textvariable=self.workers_var, width=3).pack(side="left")
