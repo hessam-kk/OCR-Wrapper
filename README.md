@@ -1,6 +1,6 @@
 # OCR-Wrapper
 
-Batch OCR extraction using [Reza2kn/Bina-0.1](https://huggingface.co/Reza2kn/Bina-0.1) — a Persian OCR vision-language model (~0.7B params).
+Batch OCR extraction wrapping 4 engines: [Reza2kn/Bina-0.1](https://huggingface.co/Reza2kn/Bina-0.1) (Persian OCR vision-language model, ~0.7B params), pdf-inspector, oneocr, and Chrome Screen AI.
 
 ![OCR-Wrapper GUI](images/ocr%20preview%201.png)
 
