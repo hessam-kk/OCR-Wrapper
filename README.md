@@ -1,27 +1,27 @@
-# OCR-Wrapper
+# OCR-Wrapper 📚
 
 Batch OCR extraction wrapping 4 engines: [Reza2kn/Bina-0.1](https://huggingface.co/Reza2kn/Bina-0.1) (Persian OCR vision-language model, ~0.7B params), pdf-inspector, oneocr, and Chrome Screen AI.
 
 ![OCR-Wrapper GUI](images/ocr%20preview%201.png)
 
-## Features
+## Features ✨
 
-- **PDF input** — renders pages lazily at configurable DPI via PyMuPDF (300 DPI default)
-- **Image folder input** — processes sorted image files (jpg, png, webp, bmp, tif, etc.)
-- **Four engines** — `bina` (vision-model OCR, handles scanned/images), `pdf-inspector` (instant text extraction for text-based PDFs), `oneocr` (Windows Snipping Tool OCR), or `chrome` (Chrome/Edge Screen AI OCR)
-- **Multi-format export** — Markdown, plain text, and ebooks (`md` `txt` `epub` `pdf` `azw3`; `epub`/`pdf`/`azw3` go through calibre's `ebook-convert`)
-- **Clean continuous output** — paragraphs are stitched across page boundaries so an OCR-split sentence doesn't break the reading flow; a `.pagemap.json` sidecar records real page breaks
-- **Persian normalization** — optional hazm post-processing that reinserts half-spaces (ZWNJ) and unifies glyphs/digits, which OCR models often drop
-- **Kindle-ready Persian** — ebook outputs pre-shape Arabic-script runs into joined presentation forms (via arabic-reshaper) so Kindle e-ink renders the script correctly
-- **Parallel workers** — optionally OCR pages concurrently (threads; the chrome engine uses processes since its DLL isn't thread-safe)
-- **Skip OCR** — re-export an existing transcript to other formats without re-running the model
-- **Tkinter GUI** — file pickers, format checkboxes, progress bar, live log, engine + GPU/CPU/DPI/workers/direction selectors (launches by default with no args)
-- **CLI mode** — for scripting and batch runs
-- **CPU fallback** — `--cpu` flag, or GPU/CPU selector in the GUI
-- **Modular code** — split into `model.py`, `pages.py`, `ocr.py`, `inspector.py`, `windows_ocr.py`, `chrome_ocr_engine.py`, `normalize.py`, `gui.py` around the `book_ocr_batch.py` entry point
-- **Model check before download** — shows cache status and repo size, asks before downloading
+- **PDF input** 📄 — renders pages lazily at configurable DPI via PyMuPDF (300 DPI default)
+- **Image folder input** 🖼️ — processes sorted image files (jpg, png, webp, bmp, tif, etc.)
+- **Four engines** ⚙️ — `bina` (vision-model OCR, handles scanned/images), `pdf-inspector` (instant text extraction for text-based PDFs), `oneocr` (Windows Snipping Tool OCR), or `chrome` (Chrome/Edge Screen AI OCR)
+- **Multi-format export** 📦 — Markdown, plain text, and ebooks (`md` `txt` `epub` `pdf` `azw3`; `epub`/`pdf`/`azw3` go through calibre's `ebook-convert`)
+- **Clean continuous output** 🧩 — paragraphs are stitched across page boundaries so an OCR-split sentence doesn't break the reading flow; a `.pagemap.json` sidecar records real page breaks
+- **Persian normalization** 🇮🇷 — optional hazm post-processing that reinserts half-spaces (ZWNJ) and unifies glyphs/digits, which OCR models often drop
+- **Kindle-ready Persian** 📖 — ebook outputs pre-shape Arabic-script runs into joined presentation forms (via arabic-reshaper) so Kindle e-ink renders the script correctly
+- **Parallel workers** 🚀 — optionally OCR pages concurrently (threads; the chrome engine uses processes since its DLL isn't thread-safe)
+- **Skip OCR** ⏭️ — re-export an existing transcript to other formats without re-running the model
+- **Tkinter GUI** 🖥️ — file pickers, format checkboxes, progress bar, live log, engine + GPU/CPU/DPI/workers/direction selectors (launches by default with no args)
+- **CLI mode** ⌨️ — for scripting and batch runs
+- **CPU fallback** 💻 — `--cpu` flag, or GPU/CPU selector in the GUI
+- **Modular code** 🧱 — split into `model.py`, `pages.py`, `ocr.py`, `inspector.py`, `windows_ocr.py`, `chrome_ocr_engine.py`, `normalize.py`, `gui.py` around the `book_ocr_batch.py` entry point
+- **Model check before download** 📥 — shows cache status and repo size, asks before downloading
 
-## Requirements
+## Requirements 🛠️
 
 ```bash
 pip install -r requirements.txt
@@ -40,15 +40,15 @@ pip install -r requirements.txt
 
 > **Note:** exporting `epub`/`pdf`/`azw3` requires [calibre](https://calibre-ebook.com/) (`ebook-convert` on PATH).
 
-## Usage
+## Usage 🚀
 
-### GUI (default)
+### GUI (default) 🖥️
 
 ```bash
 python book_ocr_batch.py
 ```
 
-### CLI — PDF
+### CLI — PDF 📄
 
 ```bash
 python book_ocr_batch.py --pdf book.pdf --output_file transcript
@@ -78,13 +78,13 @@ Chrome/Edge Screen AI OCR (offline, layout-aware — needs setup, see Notes):
 python book_ocr_batch.py --pdf book.pdf --engine chrome --output_file transcript
 ```
 
-### CLI — Image folder
+### CLI — Image folder 🖼️
 
 ```bash
 python book_ocr_batch.py --input_dir ./pages --output_file transcript
 ```
 
-### Exporting to multiple formats
+### Exporting to multiple formats 📦
 
 `--output_file` is a base name; an extension is added per selected format. `epub`/`pdf`/`azw3` need calibre and build on each other (md → epub → pdf/azw3):
 
@@ -104,7 +104,7 @@ Re-export an existing markdown transcript without re-running OCR:
 python book_ocr_batch.py --skip-ocr --output_file transcript --formats epub azw3
 ```
 
-### Options
+### Options ⚙️
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -122,14 +122,14 @@ python book_ocr_batch.py --skip-ocr --output_file transcript --formats epub azw3
 | `--cpu` | off | Force CPU even if GPU is available |
 | `--gui` | — | Launch GUI explicitly |
 
-## Output
+## Output 📝
 
-- **Markdown** — a clean continuous document with paragraphs merged across page boundaries (no `## Page N` markers), wrapped in `<div dir="rtl">` for renderers
-- **Formats** — `md`/`txt` are written directly; `epub`/`pdf`/`azw3` are produced via calibre (`ebook-convert`)
-- **Sidecar** — a `.pagemap.json` file records real page-break indices so re-exports via `--skip-ocr` keep the page structure
-- **Kindle** — `epub`/`azw3` output is pre-shaped Arabic-script Persian for e-ink; the `.md`/`.txt` stay canonical and searchable
+- **Markdown** 📄 — a clean continuous document with paragraphs merged across page boundaries (no `## Page N` markers), wrapped in `<div dir="rtl">` for renderers
+- **Formats** 🗂️ — `md`/`txt` are written directly; `epub`/`pdf`/`azw3` are produced via calibre (`ebook-convert`)
+- **Sidecar** 🗺️ — a `.pagemap.json` file records real page-break indices so re-exports via `--skip-ocr` keep the page structure
+- **Kindle** 📖 — `epub`/`azw3` output is pre-shaped Arabic-script Persian for e-ink; the `.md`/`.txt` stay canonical and searchable
 
-### Sample result (page 1 of «۱» , RTL Persian)
+### Sample result (page 1 of «۱» , RTL Persian) 🎯
 
 ![Sample OCR output](images/sample%20result%201.png)
 
@@ -151,7 +151,7 @@ python book_ocr_batch.py --skip-ocr --output_file transcript --formats epub azw3
 > راستش را بخواهید حتی دبیرستان را هم تمام نکرده.
 > سایهٔ پدر بر سرش نبوده و در شهر کوچک وانگانویی، بزرگ شده و
 
-## oneocr setup (Windows Snipping Tool OCR)
+## oneocr setup (Windows Snipping Tool OCR) ✂️
 
 The `oneocr` engine is the same high-accuracy OCR model used by Windows Snipping Tool's "Text actions" — Windows-only, fully offline, and typically faster and more accurate than classic OCR libraries. The pip package is just a wrapper; the model itself ships inside the Snipping Tool app, so it needs a one-time manual setup.
 
@@ -189,7 +189,7 @@ python -c "from windows_ocr import get_ocr_engine; get_ocr_engine(); print('oneo
 
 > **Note:** the `oneocr` engine uses a model extracted from Microsoft's proprietary Snipping Tool — check licensing before distributing.
 
-## Notes
+## Notes 📌
 
 - Model is cached locally after first download (~1.3GB); the tool checks the cache and asks before downloading
 - pdf-inspector is instant (<1s) but only handles text-based PDFs — scanned pages need the `bina` engine
@@ -200,6 +200,6 @@ python -c "from windows_ocr import get_ocr_engine; get_ocr_engine(); print('oneo
 - `torch.cuda.empty_cache()` runs every 10 pages for low-VRAM GPUs
 - Stop button (GUI) / Ctrl-C (CLI) stops after the current page
 
-## License
+## License 📄
 
 [MIT](LICENSE)
