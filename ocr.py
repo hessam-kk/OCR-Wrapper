@@ -311,6 +311,7 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
             paragraphs = [body]
         if pagemap_path.exists():
             page_breaks = set(json.loads(pagemap_path.read_text(encoding="utf-8")))
+            pagemap_path.unlink()
         else:
             page_breaks = set()
     else:
