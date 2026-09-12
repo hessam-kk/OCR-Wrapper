@@ -10,12 +10,19 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 import torch
 
-from model import MODEL_ID, load_model, model_cache_info, repo_size_gb, write_inspector_transcript
+from model import (
+    MODEL_ID,
+    load_model,
+    model_cache_info,
+    repo_size_gb,
+    write_inspector_transcript,
+)
 from normalize import get_normalizer, normalize_transcribe
 from ocr import FORMATS, run_ocr_pages, transcribe_page, write_outputs
 from pages import PDF_DPI, get_page_images, get_pdf_images
 from chrome_ocr_engine import chrome_transcribe_page, get_screenai_engine
 from windows_ocr import get_ocr_engine, oneocr_transcribe_page
+from pdf_batch import create_pdf_jobs, pdfs_in_folder, process_pdf_jobs
 
 
 class OCRApp:
@@ -26,18 +33,31 @@ class OCRApp:
         self.root.resizable(True, True)
 
         self.running = False
+        self.pdf_paths = []
 
         # --- Input source ---
         src_frame = ttk.LabelFrame(root, text="Input Source", padding=8)
         src_frame.pack(fill="x", padx=10, pady=(10, 4))
 
         self.input_type = tk.StringVar(value="pdf")
-        ttk.Radiobutton(src_frame, text="PDF File", variable=self.input_type, value="pdf").grid(row=0, column=0, sticky="w")
-        ttk.Radiobutton(src_frame, text="Image Folder", variable=self.input_type, value="dir").grid(row=0, column=1, sticky="w", padx=(10, 0))
+        input_choices = (
+            ("PDF File", "pdf"),
+            ("Multiple PDFs", "pdfs"),
+            ("PDF Folder", "pdf_dir"),
+            ("Image Folder", "dir"),
+        )
+        for column, (label, value) in enumerate(input_choices):
+            ttk.Radiobutton(
+                src_frame,
+                text=label,
+                variable=self.input_type,
+                value=value,
+                command=self._input_type_changed,
+            ).grid(row=0, column=column, sticky="w", padx=(0 if column == 0 else 10, 0))
 
         self.input_path = tk.StringVar()
         path_frame = ttk.Frame(src_frame)
-        path_frame.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        path_frame.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(4, 0))
         ttk.Entry(path_frame, textvariable=self.input_path, width=60).pack(side="left", fill="x", expand=True)
         ttk.Button(path_frame, text="Browse", command=self._browse_input).pack(side="left", padx=(4, 0))
 
@@ -47,7 +67,8 @@ class OCRApp:
         out_frame = ttk.LabelFrame(root, text="Output", padding=8)
         out_frame.pack(fill="x", padx=10, pady=4)
 
-        ttk.Label(out_frame, text="Transcript:").grid(row=0, column=0, sticky="w")
+        self.output_label = ttk.Label(out_frame, text="Transcript:")
+        self.output_label.grid(row=0, column=0, sticky="w")
         self.output_file = tk.StringVar(value="book_transcript")
         ttk.Entry(out_frame, textvariable=self.output_file, width=50).grid(row=0, column=1, sticky="ew", padx=(4, 4))
         ttk.Button(out_frame, text="Browse", command=self._browse_output).grid(row=0, column=2)
@@ -56,7 +77,11 @@ class OCRApp:
         ttk.Checkbutton(out_frame, text="Save in folder", variable=self.folder_var).grid(row=0, column=3, sticky="w", padx=(12, 0))
 
         self.skip_ocr_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(out_frame, text="Skip OCR (re-export from existing md)", variable=self.skip_ocr_var).grid(row=0, column=4, sticky="w", padx=(12, 0))
+        ttk.Checkbutton(
+            out_frame,
+            text="Skip OCR (re-export from existing md)",
+            variable=self.skip_ocr_var,
+        ).grid(row=0, column=4, sticky="w", padx=(12, 0))
 
         ttk.Label(out_frame, text="Formats:").grid(row=1, column=0, sticky="w", pady=(4, 0))
         self.format_vars = {}
@@ -83,11 +108,22 @@ class OCRApp:
 
         ttk.Label(opt_frame, text="DPI:").grid(row=0, column=4, sticky="w", padx=(8, 0))
         self.dpi_var = tk.StringVar(value="300")
-        ttk.Combobox(opt_frame, textvariable=self.dpi_var, values=["150", "200", "300", "400"], width=5, state="readonly").grid(row=0, column=5, sticky="w", padx=(4, 0))
+        ttk.Combobox(
+            opt_frame,
+            textvariable=self.dpi_var,
+            values=["150", "200", "300", "400"],
+            width=5,
+            state="readonly",
+        ).grid(row=0, column=5, sticky="w", padx=(4, 0))
 
         ttk.Label(opt_frame, text="Engine:").grid(row=1, column=0, sticky="w", pady=(6, 0))
         self.engine_var = tk.StringVar(value="chrome")
-        ttk.Radiobutton(opt_frame, text="Chrome (Screen AI)", variable=self.engine_var, value="chrome").grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
+        ttk.Radiobutton(
+            opt_frame,
+            text="Chrome (Screen AI)",
+            variable=self.engine_var,
+            value="chrome",
+        ).grid(row=1, column=1, sticky="w", padx=(4, 0), pady=(6, 0))
         ttk.Radiobutton(opt_frame, text="Windows (oneocr)", variable=self.engine_var, value="oneocr").grid(row=1, column=2, sticky="w", padx=(6, 0), pady=(6, 0))
         ttk.Radiobutton(opt_frame, text="bina (OCR)", variable=self.engine_var, value="bina").grid(row=1, column=3, sticky="w", padx=(6, 0), pady=(6, 0))
         ttk.Radiobutton(opt_frame, text="pdf-inspector", variable=self.engine_var, value="inspector").grid(row=1, column=4, sticky="w", padx=(6, 0), pady=(6, 0))
@@ -98,7 +134,11 @@ class OCRApp:
         ttk.Radiobutton(opt_frame, text="CPU", variable=self.device_var, value="cpu").grid(row=2, column=2, sticky="w", padx=(8, 0), pady=(6, 0))
 
         self.normalize_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(opt_frame, text="Normalize Persian (half-space)", variable=self.normalize_var).grid(row=3, column=0, sticky="w", pady=(6, 0))
+        ttk.Checkbutton(
+            opt_frame,
+            text="Normalize Persian (half-space)",
+            variable=self.normalize_var,
+        ).grid(row=3, column=0, sticky="w", pady=(6, 0))
 
         worker_frame = ttk.Frame(opt_frame)
         worker_frame.grid(row=3, column=1, sticky="w", padx=(30, 0), pady=(6, 0))
@@ -142,20 +182,51 @@ class OCRApp:
 
     # --- File dialogs ---
 
+    def _input_type_changed(self):
+        self.pdf_paths = []
+        self.input_path.set("")
+        is_batch = self.input_type.get() in ("pdfs", "pdf_dir")
+        self.output_label.configure(text="Output folder:" if is_batch else "Transcript:")
+        if is_batch:
+            self.output_file.set("transcripts")
+
     def _browse_input(self):
-        if self.input_type.get() == "dir":
-            path = filedialog.askdirectory(title="Select image folder")
+        input_type = self.input_type.get()
+
+        if input_type in ("dir", "pdf_dir"):
+            title = "Select image folder" if input_type == "dir" else "Select folder containing PDFs"
+            path = filedialog.askdirectory(title=title)
+        elif input_type == "pdfs":
+            paths = filedialog.askopenfilenames(
+                title="Select PDF files",
+                filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")],
+            )
+            if not paths:
+                return
+            self.pdf_paths = [Path(path) for path in paths]
+            self.input_path.set(f"{len(paths)} PDF files selected")
+            self.output_file.set(str(self.pdf_paths[0].parent / "transcripts"))
+            return
         else:
             path = filedialog.askopenfilename(
                 title="Select PDF file",
                 filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")],
             )
         if path:
+            self.pdf_paths = []
             self.input_path.set(path)
-            if self.input_type.get() == "pdf":
+            if input_type == "pdf":
                 self.output_file.set(Path(path).stem + "_transcript")
+            elif input_type == "pdf_dir":
+                self.output_file.set(str(Path(path) / "transcripts"))
 
     def _browse_output(self):
+        if self.input_type.get() in ("pdfs", "pdf_dir"):
+            path = filedialog.askdirectory(title="Select output folder")
+            if path:
+                self.output_file.set(path)
+            return
+
         path = filedialog.asksaveasfilename(
             title="Save transcript as",
             defaultextension=".md",
@@ -164,6 +235,17 @@ class OCRApp:
         )
         if path:
             self.output_file.set(Path(path).stem)
+
+    def _batch_jobs(self):
+        if self.input_type.get() == "pdfs":
+            pdf_paths = self.pdf_paths
+        else:
+            pdf_paths = pdfs_in_folder(Path(self.input_path.get().strip()))
+        return create_pdf_jobs(
+            pdf_paths,
+            Path(self.output_file.get().strip()),
+            separate_folders=self.folder_var.get(),
+        )
 
     # --- Logging ---
 
@@ -176,9 +258,7 @@ class OCRApp:
     def _ask_download(self, size_gb):
         return messagebox.askyesno(
             "Model not downloaded",
-            f"Model {MODEL_ID} is not cached locally.\n\n"
-            f"Download size: ~{size_gb:.1f} GB\n\n"
-            "Download it now?",
+            f"Model {MODEL_ID} is not cached locally.\n\n" f"Download size: ~{size_gb:.1f} GB\n\n" "Download it now?",
         )
 
     def _output_base(self):
@@ -229,28 +309,48 @@ class OCRApp:
             input_type = self.input_type.get()
             engine = self.engine_var.get()
 
+            if input_type in ("pdfs", "pdf_dir"):
+                self._run_pdf_batch(engine)
+                return
+
             if self.skip_ocr_var.get():
                 output_base = self._output_base()
                 formats = [f for f, v in self.format_vars.items() if v.get()]
                 self.root.after(0, lambda: self.status_label.configure(text="Re-exporting..."))
-                write_outputs(None, output_base, formats,
-                              log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
-                              direction=self.direction_var.get())
+                write_outputs(
+                    None,
+                    output_base,
+                    formats,
+                    log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
+                    direction=self.direction_var.get(),
+                )
                 self.root.after(0, lambda: self.status_label.configure(text="Done"))
                 return
 
             if engine == "inspector":
                 if input_type != "pdf":
-                    self.root.after(0, lambda: messagebox.showerror("Error", "pdf-inspector only processes PDF files. Pick a PDF or switch to bina."))
+                    self.root.after(
+                        0,
+                        lambda: messagebox.showerror(
+                            "Error",
+                            "pdf-inspector only processes PDF files. Pick a PDF or switch to bina.",
+                        ),
+                    )
                     return
                 if not input_path.is_file():
-                    self.root.after(0, lambda: messagebox.showerror("Error", f"PDF not found: {input_path}"))
+                    self.root.after(
+                        0,
+                        lambda: messagebox.showerror("Error", f"PDF not found: {input_path}"),
+                    )
                     return
                 output_base = self._output_base()
                 formats = [f for f, v in self.format_vars.items() if v.get()]
                 self.root.after(0, lambda: self.status_label.configure(text="Extracting text..."))
                 write_inspector_transcript(
-                    input_path, output_base, formats, self.direction_var.get(),
+                    input_path,
+                    output_base,
+                    formats,
+                    self.direction_var.get(),
                     log=lambda m: self.root.after(0, lambda s=m: self._log(s)),
                 )
                 self.root.after(0, lambda: self.status_label.configure(text="Done"))
@@ -261,18 +361,27 @@ class OCRApp:
             limit = self.page_limit.get()
             if input_type == "pdf":
                 if not input_path.is_file():
-                    self.root.after(0, lambda: messagebox.showerror("Error", f"PDF not found: {input_path}"))
+                    self.root.after(
+                        0,
+                        lambda: messagebox.showerror("Error", f"PDF not found: {input_path}"),
+                    )
                     return
                 pdf_tmp_dir = Path(tempfile.mkdtemp(prefix="ocr_pdf_"))
                 dpi = int(self.dpi_var.get())
-                self.root.after(0, lambda: self._log(f"Rendering PDF pages at {dpi} DPI (lazy, page by page)..."))
+                self.root.after(
+                    0,
+                    lambda: self._log(f"Rendering PDF pages at {dpi} DPI (lazy, page by page)..."),
+                )
                 pages, total = get_pdf_images(input_path, pdf_tmp_dir, dpi)
                 if limit > 0:
                     pages = itertools.islice(pages, limit)
                     total = min(total, limit)
             else:
                 if not input_path.is_dir():
-                    self.root.after(0, lambda: messagebox.showerror("Error", f"Folder not found: {input_path}"))
+                    self.root.after(
+                        0,
+                        lambda: messagebox.showerror("Error", f"Folder not found: {input_path}"),
+                    )
                     return
                 pages = get_page_images(input_path)
                 total = len(pages)
@@ -290,11 +399,17 @@ class OCRApp:
                 self.root.after(0, lambda: self._log("[INFO] Persian normalization enabled (hazm)"))
 
             if engine == "oneocr":
-                self.root.after(0, lambda: self.status_label.configure(text="Loading Windows OCR engine..."))
+                self.root.after(
+                    0,
+                    lambda: self.status_label.configure(text="Loading Windows OCR engine..."),
+                )
                 ocr_engine = get_ocr_engine()
                 transcribe = lambda p: oneocr_transcribe_page(ocr_engine, p)
             elif engine == "chrome":
-                self.root.after(0, lambda: self.status_label.configure(text="Loading Chrome Screen AI..."))
+                self.root.after(
+                    0,
+                    lambda: self.status_label.configure(text="Loading Chrome Screen AI..."),
+                )
                 ocr_engine = get_screenai_engine()
                 transcribe = lambda p: chrome_transcribe_page(ocr_engine, p)
             else:
@@ -302,7 +417,10 @@ class OCRApp:
                 cached, cache_size = model_cache_info()
                 if not cached:
                     size_gb = repo_size_gb()
-                    self.root.after(0, lambda s=size_gb: self._log(f"[INFO] Model {MODEL_ID} is not downloaded yet (~{s:.1f} GB)."))
+                    self.root.after(
+                        0,
+                        lambda s=size_gb: self._log(f"[INFO] Model {MODEL_ID} is not downloaded yet (~{s:.1f} GB)."),
+                    )
                     ask = self._ask_download(size_gb)
                     if not ask:
                         self.root.after(0, lambda: self._log("Aborted - model not downloaded."))
@@ -319,7 +437,10 @@ class OCRApp:
             if self.normalize_var.get():
                 transcribe = normalize_transcribe(transcribe, normalizer)
 
-            self.root.after(0, lambda: self.status_label.configure(text=f"Processing 0/{total} pages..."))
+            self.root.after(
+                0,
+                lambda: self.status_label.configure(text=f"Processing 0/{total} pages..."),
+            )
             self.root.after(0, lambda: self.progress.configure(maximum=total))
 
             def on_progress(i, tot, elapsed, name):
@@ -328,13 +449,19 @@ class OCRApp:
 
             workers = self.workers_var.get()
             if engine == "bina" and workers > 1:
-                self.root.after(0, lambda: self._log("[INFO] bina engine is single-device - ignoring workers"))
+                self.root.after(
+                    0,
+                    lambda: self._log("[INFO] bina engine is single-device - ignoring workers"),
+                )
                 workers = 1
             # chrome's DLL races across threads but is safe across processes
             parallel_mode = "process" if engine == "chrome" else "thread"
 
             run_ocr_pages(
-                transcribe, pages, output_base, formats,
+                transcribe,
+                pages,
+                output_base,
+                formats,
                 direction=self.direction_var.get(),
                 total=total,
                 workers=workers,
@@ -354,15 +481,166 @@ class OCRApp:
             self.root.after(0, lambda: self.progress.configure(value=total))
 
         except Exception as e:
-            self.root.after(0, lambda err=e: (
-                self._log(f"FATAL: {err}"),
-                self.status_label.configure(text="Error"),
-                messagebox.showerror("Error", str(err)),
-            ))
+            self.root.after(
+                0,
+                lambda err=e: (
+                    self._log(f"FATAL: {err}"),
+                    self.status_label.configure(text="Error"),
+                    messagebox.showerror("Error", str(err)),
+                ),
+            )
         finally:
             self.running = False
-            self.root.after(0, lambda: (
-                self._finalize_timer(),
-                self.start_btn.configure(state="normal"),
-                self.stop_btn.configure(state="disabled"),
-            ))
+            self.root.after(
+                0,
+                lambda: (
+                    self._finalize_timer(),
+                    self.start_btn.configure(state="normal"),
+                    self.stop_btn.configure(state="disabled"),
+                ),
+            )
+
+    def _run_pdf_batch(self, engine):
+        """Process selected PDFs with one shared engine instance."""
+        jobs = self._batch_jobs()
+        formats = [name for name, enabled in self.format_vars.items() if enabled.get()]
+        direction = self.direction_var.get()
+
+        def log(message):
+            self.root.after(0, lambda value=message: self._log(value))
+
+        self.root.after(0, lambda: self.progress.configure(maximum=len(jobs), value=0))
+        log(f"[INFO] Batch contains {len(jobs)} PDF files.")
+
+        if self.skip_ocr_var.get():
+
+            def process(job, index, total):
+                self.root.after(
+                    0,
+                    lambda: self.status_label.configure(text=f"Re-exporting PDF {index}/{total}..."),
+                )
+                write_outputs(None, job.output_base, formats, log, direction)
+                self.root.after(0, lambda: self.progress.configure(value=index))
+
+        elif engine == "inspector":
+
+            def process(job, index, total):
+                self.root.after(
+                    0,
+                    lambda: self.status_label.configure(text=f"Extracting PDF {index}/{total}..."),
+                )
+                write_inspector_transcript(
+                    job.input_path,
+                    job.output_base,
+                    formats,
+                    direction,
+                    log=log,
+                )
+                self.root.after(0, lambda: self.progress.configure(value=index))
+
+        else:
+            transcribe = self._create_batch_transcriber(engine, log)
+            if transcribe is None:
+                return
+
+            def process(job, index, total_documents):
+                with tempfile.TemporaryDirectory(prefix="ocr_pdf_") as temp_dir:
+                    dpi = int(self.dpi_var.get())
+                    pages, total_pages = get_pdf_images(job.input_path, Path(temp_dir), dpi)
+                    limit = self.page_limit.get()
+                    if limit > 0:
+                        pages = itertools.islice(pages, limit)
+                        total_pages = min(total_pages, limit)
+
+                    log(f"[INFO] Found {total_pages} pages to process.")
+                    self.root.after(
+                        0,
+                        lambda: self.progress.configure(maximum=total_pages, value=0),
+                    )
+
+                    workers = self.workers_var.get()
+                    if engine == "bina" and workers > 1:
+                        log("[INFO] bina engine is single-device - ignoring workers")
+                        workers = 1
+
+                    def on_progress(page, page_total, elapsed):
+                        self.progress.configure(value=page)
+                        self.status_label.configure(text=(f"PDF {index}/{total_documents}, page " f"{page}/{page_total} ({elapsed:.1f}s)"))
+
+                    run_ocr_pages(
+                        transcribe,
+                        pages,
+                        job.output_base,
+                        formats,
+                        direction=direction,
+                        total=total_pages,
+                        workers=workers,
+                        parallel_mode=("process" if engine == "chrome" else "thread"),
+                        parallel_engine=engine,
+                        log=log,
+                        progress=lambda page, page_total, elapsed, _name: self.root.after(
+                            0,
+                            lambda: on_progress(page, page_total, elapsed),
+                        ),
+                        should_stop=lambda: not self.running,
+                    )
+
+        summary = process_pdf_jobs(
+            jobs,
+            process,
+            log=log,
+            should_stop=lambda: not self.running,
+        )
+        log("\n=== Batch summary ===")
+        log(f"PDFs succeeded: {summary.succeeded}/{len(jobs)}")
+        log(f"Output directory: {Path(self.output_file.get()).resolve()}")
+
+        if summary.stopped:
+            self.root.after(0, lambda: self.status_label.configure(text="Stopped"))
+        elif summary.failures:
+            log(f"PDFs failed: {len(summary.failures)}")
+            self.root.after(0, lambda: self.status_label.configure(text="Done with errors"))
+        else:
+            self.root.after(0, lambda: self.status_label.configure(text="Done"))
+
+    def _create_batch_transcriber(self, engine, log):
+        """Initialize an OCR engine once, then reuse it for every PDF."""
+        normalizer = None
+        if self.normalize_var.get():
+            normalizer = get_normalizer()
+            log("[INFO] Persian normalization enabled (hazm)")
+
+        if engine == "oneocr":
+            self.root.after(
+                0,
+                lambda: self.status_label.configure(text="Loading Windows OCR engine..."),
+            )
+            ocr_engine = get_ocr_engine()
+            transcribe = lambda path: oneocr_transcribe_page(ocr_engine, path)
+        elif engine == "chrome":
+            self.root.after(
+                0,
+                lambda: self.status_label.configure(text="Loading Chrome Screen AI..."),
+            )
+            ocr_engine = get_screenai_engine()
+            transcribe = lambda path: chrome_transcribe_page(ocr_engine, path)
+        else:
+            cached, _cache_size = model_cache_info()
+            if not cached:
+                size_gb = repo_size_gb()
+                log(f"[INFO] Model {MODEL_ID} is not downloaded yet " f"(~{size_gb:.1f} GB).")
+                if not self._ask_download(size_gb):
+                    log("Aborted - model not downloaded.")
+                    return None
+
+            self.root.after(0, lambda: self.status_label.configure(text="Loading model..."))
+            processor, model, _device = load_model(
+                force_cpu=self.device_var.get() == "cpu",
+                log=log,
+            )
+            max_tokens = self.max_tokens.get()
+            transcribe = lambda path: transcribe_page(processor, model, path, max_tokens)
+
+        if normalizer is not None:
+            transcribe = normalize_transcribe(transcribe, normalizer)
+        return transcribe

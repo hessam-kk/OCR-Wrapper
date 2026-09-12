@@ -48,6 +48,11 @@ pip install -r requirements.txt
 python book_ocr_batch.py
 ```
 
+Choose **Multiple PDFs** to select several files, or **PDF Folder** to process
+every PDF directly inside a folder. Select an output folder; each document is
+exported as `<original-name>_transcript.<format>`. **Save in folder** puts each
+document's exports in a separate subfolder.
+
 ### CLI — PDF 📄
 
 ```bash
@@ -59,6 +64,25 @@ Fast text extraction of a text-based PDF (no OCR, no model download):
 ```bash
 python book_ocr_batch.py --pdf book.pdf --engine inspector --output_file transcript
 ```
+
+### CLI — multiple PDFs 📚
+
+Process explicitly selected PDFs with the same settings:
+
+```bash
+python book_ocr_batch.py --pdfs paper-one.pdf paper-two.pdf --engine inspector --direction ltr --output_dir transcripts
+```
+
+Process every PDF directly inside a folder:
+
+```bash
+python book_ocr_batch.py --pdf_dir ./papers --engine inspector --direction ltr --output_dir transcripts
+```
+
+Batch outputs are named after their inputs, such as
+`transcripts/paper-one_transcript.md`. Add `--save_in_folders` to create one
+subfolder per PDF. If one document fails, the remaining documents are still
+processed and the failures are listed in the batch summary.
 
 Windows Snipping Tool OCR (high accuracy, fully offline — needs model files, see [oneocr setup](#oneocr-setup-windows-snipping-tool-ocr)):
 
@@ -109,12 +133,17 @@ python book_ocr_batch.py --skip-ocr --output_file transcript --formats epub azw3
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--pdf` | — | Path to PDF file |
+| `--pdfs` | — | Paths to multiple PDF files |
+| `--pdf_dir` | — | Folder of PDF files (non-recursive) |
 | `--input_dir` | — | Folder of page images |
 | `--output_file` | `book_transcript` | Output base name (extension added per format) |
+| `--output_dir` | `transcripts` | Output folder used with `--pdfs` or `--pdf_dir` |
+| `--save_in_folders` | off | Put each batch transcript in its own subfolder |
 | `--formats` | `md` | Output formats: `md` `txt` `epub` `pdf` `azw3` (ebook formats need calibre) |
 | `--direction` | `rtl` | Text direction of the exported output (`rtl`/`ltr`) |
 | `--max_new_tokens` | `1024` | Max tokens generated per page (bina) |
 | `--limit` | all | Process only first N pages |
+| `--dpi` | `300` | PDF rendering DPI for OCR engines |
 | `--engine` | `bina` | `bina` (vision OCR), `inspector` (pdf-inspector, PDF only), `oneocr` (Windows OCR) or `chrome` (Chrome Screen AI) |
 | `--workers` | `1` | Parallel page workers (2-8; bina stays 1, chrome uses processes) |
 | `--normalize` | off | Normalize Persian text with hazm (reinserts half-spaces/ZWNJ) |
