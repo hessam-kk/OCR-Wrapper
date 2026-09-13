@@ -294,10 +294,9 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
     requested = set(formats)
 
     md_path = output_base.with_suffix(".md")
-    # Sidecars are legacy: early versions wrote a .pagemap.json next to the .md,
-    # so a re-export of those outputs still recovers its page breaks (and then
-    # removes the file). Runs no longer leave one behind - the outputs are just
-    # the transcript in each requested format.
+    # Sidecars are legacy: older versions wrote a .pagemap.json next to the .md.
+    # Re-exporting those outputs still reads one (and removes it), but a run no
+    # longer writes one - the output is only the transcript in each format.
     legacy_pagemap_path = output_base.with_suffix(".pagemap.json")
     if texts is None:
         # Re-export from an existing markdown (skip OCR). Paragraph boundaries
