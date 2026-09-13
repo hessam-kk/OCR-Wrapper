@@ -26,6 +26,7 @@ try:
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     import gui
+    import settings_store
 except ImportError as error:  # pragma: no cover - depends on the environment
     QApplication = None
     QMessageBox = None
@@ -45,6 +46,13 @@ class QtGuiSmokeTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = TemporaryDirectory()
         self.root = Path(self.temp_dir.name)
+        # Point the settings store at a throwaway directory: the tests must not
+        # read, or overwrite, the real user's saved settings.
+        override = patch.dict(
+            os.environ, {settings_store.ENV_OVERRIDE: str(self.root / "config")}
+        )
+        override.start()
+        self.addCleanup(override.stop)
         self.window = gui.OCRApp()
         # LTR keeps arabic-reshaper out of the picture (optional extra).
         self.window.direction_buttons["ltr"].setChecked(True)
@@ -95,11 +103,12 @@ class QtGuiSmokeTests(unittest.TestCase):
         self.window.output_file.setText(str(output_dir))
         self.window.layout_buttons[layout].setChecked(True)
 
-    def _start_and_wait(self, timeout=120):
-        self.window._start()
-        self.assertIsNotNone(self.window.thread, "the worker thread was never started")
+    def _start_and_wait(self, timeout=120, window=None):
+        window = window or self.window
+        window._start()
+        self.assertIsNotNone(window.thread, "the worker thread was never started")
         deadline = time.time() + timeout
-        while self.window.thread.is_alive():
+        while window.thread.is_alive():
             self.app.processEvents()
             time.sleep(0.01)
             if time.time() > deadline:
@@ -307,6 +316,197 @@ class QtGuiSmokeTests(unittest.TestCase):
 
         warning.assert_called_once()
         self.assertIsNone(self.window.thread)
+
+    # --- remembered settings ---
+
+    def _restart(self):
+        """A second window, as if the app had been closed and reopened."""
+        window = gui.OCRApp()
+        self.addCleanup(window.deleteLater)
+        return window
+
+    def test_first_launch_keeps_the_defaults(self):
+        """With no settings file the form looks exactly as it always did."""
+        first = self._restart()
+
+        self.assertFalse(settings_store.settings_path().exists())
+        self.assertEqual(first._input_type(), "pdf")
+        self.assertTrue(first.folder_check.isChecked())
+        self.assertFalse(first.same_dir_check.isChecked())
+        self.assertEqual(first.output_file.text(), "book_transcript")
+        self.assertEqual(first.dpi_box.currentText(), "300")
+        self.assertEqual(first.max_tokens.value(), 1024)
+        self.assertEqual(first.workers.value(), 1)
+        self.assertEqual(first.page_limit.value(), 0)
+        self.assertTrue(first.format_boxes["md"].isChecked())
+        self.assertTrue(first.direction_buttons["rtl"].isChecked())
+        self.assertTrue(first.normalize_check.isChecked())
+        self.assertFalse(first.skip_ocr_check.isChecked())
+
+    def test_a_run_remembers_the_form(self):
+        pdf = self._text_pdf()
+        self._select_single_pdf(pdf, self.root / "single")
+        self.window.device_buttons["cpu"].setChecked(True)
+        self.window.same_dir_check.setChecked(True)
+        self.window.normalize_check.setChecked(False)
+        self.window.max_tokens.setValue(2048)
+        self.window.page_limit.setValue(5)
+        self.window.dpi_box.setCurrentText("200")
+        self.window.workers.setValue(3)
+
+        self._start_and_wait()
+
+        saved = settings_store.load()
+        self.assertEqual(saved["engine"], "inspector")
+        self.assertEqual(saved["input_path"], str(pdf))
+        self.assertEqual(saved["formats"], ["md"])
+        self.assertEqual(saved["device"], "cpu")
+        self.assertTrue(saved["same_dir_check"])
+        self.assertFalse(saved["normalize"])
+        self.assertEqual(saved["max_tokens"], 2048)
+        self.assertEqual(saved["page_limit"], 5)
+        self.assertEqual(saved["dpi"], "200")
+        self.assertEqual(saved["workers"], 3)
+
+    def test_closing_the_window_remembers_the_form(self):
+        self.window.engine_buttons["oneocr"].setChecked(True)
+        self.window.skip_ocr_check.setChecked(True)
+
+        self.window.close()
+
+        saved = settings_store.load()
+        self.assertEqual(saved["engine"], "oneocr")
+        self.assertTrue(saved["skip_ocr"])
+
+    def test_the_next_launch_restores_the_form(self):
+        self.window.input_type_buttons["pdf"].setChecked(True)
+        self.window._input_type_changed()
+        self.window.input_path.setText(str(self.root / "paper.pdf"))
+        self.window.output_file.setText("my_transcript")
+        self.window.folder_check.setChecked(False)
+        self.window.same_dir_check.setChecked(True)
+        self.window.engine_buttons["oneocr"].setChecked(True)
+        self.window.device_buttons["cpu"].setChecked(True)
+        self.window.direction_buttons["ltr"].setChecked(True)
+        self.window.normalize_check.setChecked(False)
+        self.window.max_tokens.setValue(2048)
+        self.window.workers.setValue(3)
+        self.window.dpi_box.setCurrentText("400")
+        for fmt, box in self.window.format_boxes.items():
+            box.setChecked(fmt == "txt")
+        self.window._save_settings()
+
+        restored = self._restart()
+
+        self.assertEqual(restored._input_type(), "pdf")
+        self.assertEqual(restored.input_path.text(), str(self.root / "paper.pdf"))
+        self.assertEqual(restored.output_file.text(), "my_transcript")
+        self.assertFalse(restored.folder_check.isChecked())
+        self.assertTrue(restored.same_dir_check.isChecked())
+        self.assertTrue(restored.engine_buttons["oneocr"].isChecked())
+        self.assertTrue(restored.device_buttons["cpu"].isChecked())
+        self.assertTrue(restored.direction_buttons["ltr"].isChecked())
+        self.assertFalse(restored.normalize_check.isChecked())
+        self.assertEqual(restored.max_tokens.value(), 2048)
+        self.assertEqual(restored.workers.value(), 3)
+        self.assertEqual(restored.dpi_box.currentText(), "400")
+        self.assertTrue(restored.format_boxes["txt"].isChecked())
+        self.assertFalse(restored.format_boxes["md"].isChecked())
+        # The remembered options still resolve to the same output path.
+        self.assertEqual(
+            restored._output_base(), self.root / "my_transcript"
+        )
+
+    def test_batch_inputs_are_remembered(self):
+        pdf = self._text_pdf()
+        settings_store.save({
+            "input_type": "pdfs",
+            "pdf_paths": [str(pdf)],
+            "output_file": str(self.root / "out"),
+            "batch_layout": gui.BY_TYPE,
+        })
+
+        restored = self._restart()
+
+        self.assertEqual(restored._input_type(), "pdfs")
+        self.assertEqual(restored.pdf_paths, [pdf])
+        self.assertEqual(restored.input_path.text(), "1 PDF file selected")
+        self.assertEqual(restored.output_file.text(), str(self.root / "out"))
+        self.assertTrue(restored.layout_buttons[gui.BY_TYPE].isChecked())
+        self.assertFalse(restored.same_dir_check.isVisibleTo(restored))
+
+    def test_stale_batch_pdfs_are_dropped_on_restore(self):
+        pdf = self._text_pdf()
+        settings_store.save({
+            "input_type": "pdfs",
+            "pdf_paths": [str(self.root / "gone.pdf"), str(pdf)],
+        })
+
+        restored = self._restart()
+
+        self.assertEqual(restored.pdf_paths, [pdf])
+        self.assertEqual(restored.input_path.text(), "1 PDF file selected")
+        self.assertIn("no longer exist", restored.log.toPlainText())
+
+    def test_batch_restore_with_no_usable_pdfs_stays_empty(self):
+        settings_store.save({
+            "input_type": "pdfs",
+            "pdf_paths": [str(self.root / "gone.pdf")],
+        })
+
+        restored = self._restart()
+
+        self.assertEqual(restored.pdf_paths, [])
+        self.assertEqual(restored.input_path.text(), "")
+
+    def test_corrupt_settings_fall_back_to_the_defaults(self):
+        path = settings_store.settings_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{ not json", encoding="utf-8")
+
+        restored = self._restart()
+
+        self.assertEqual(restored._input_type(), "pdf")
+        self.assertTrue(restored.folder_check.isChecked())
+        self.assertEqual(restored.dpi_box.currentText(), "300")
+        self.assertEqual(restored.max_tokens.value(), 1024)
+
+    def test_unknown_saved_values_are_ignored(self):
+        settings_store.save({
+            "input_type": "bogus",
+            "engine": "nope",
+            "device": "tpu",
+            "dpi": "999",
+            "workers": -5,
+            "formats": ["docx"],
+            "output_file": 42,
+        })
+
+        restored = self._restart()
+
+        self.assertEqual(restored._input_type(), "pdf")
+        self.assertTrue(restored.engine_buttons["chrome"].isChecked())
+        self.assertEqual(restored.dpi_box.currentText(), "300")
+        self.assertEqual(restored.workers.value(), 1)  # clamped into range
+        self.assertTrue(restored.format_boxes["md"].isChecked())
+        self.assertEqual(restored.output_file.text(), "book_transcript")
+
+    def test_a_remembered_input_that_vanished_fails_cleanly(self):
+        """A restored input path can be stale; the run reports it, not crashes."""
+        settings_store.save({
+            "input_type": "pdf",
+            "input_path": str(self.root / "gone.pdf"),
+        })
+        restored = self._restart()
+
+        with patch.object(QMessageBox, "critical") as critical:
+            self._start_and_wait(window=restored)
+
+        self.assertEqual(restored.input_path.text(), str(self.root / "gone.pdf"))
+        self.assertEqual(restored.status_label.text(), "Error")
+        self.assertIn("PDF not found", restored.log.toPlainText())
+        critical.assert_called_once()
+        self.assertIn("PDF not found", critical.call_args.args[2])
 
 
 if __name__ == "__main__":
