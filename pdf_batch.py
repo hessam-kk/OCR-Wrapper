@@ -8,11 +8,6 @@ from typing import Iterable
 # Some Windows applications still fail near the legacy 260-character limit.
 MAX_OUTPUT_PATH = 240
 
-# The longest file name the pipeline writes into a per-PDF folder, used to keep
-# the whole path inside MAX_OUTPUT_PATH.
-LONGEST_OUTPUT_NAME = "transcript.ebook.md"
-
-
 @dataclass(frozen=True)
 class PDFJob:
     input_path: Path
@@ -63,7 +58,9 @@ def create_jobs(paths: Iterable[Path], output_dir: Path) -> list[PDFJob]:
 
 
 def _document_name(pdf: Path, output_dir: Path, used: set[str]) -> str:
-    suffix = f"\\{LONGEST_OUTPUT_NAME}"
+    # transcript.ebook.md is the longest file written into the folder, so it
+    # decides how much room a shortened folder name may take.
+    suffix = "\\transcript.ebook.md"
     maximum = min(100, MAX_OUTPUT_PATH - len(str(output_dir)) - len(suffix) - 1)
     if maximum < 20:
         raise ValueError("Output folder path is too long; choose a shorter output folder")
