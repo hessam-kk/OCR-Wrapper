@@ -95,13 +95,12 @@ class QtGuiSmokeTests(unittest.TestCase):
         for fmt, box in self.window.format_boxes.items():
             box.setChecked(fmt == "md")
 
-    def _select_batch(self, pdfs, output_dir, layout=gui.BY_TYPE):
+    def _select_batch(self, pdfs, output_dir):
         self.window.input_type_buttons["pdfs"].setChecked(True)
         self.window._input_type_changed()
         self.window.pdf_paths = list(pdfs)
-        self.window.input_path.setText(f"{len(pdfs)} PDF files selected")
+        self.window.input_path.setText(gui._pdf_count_label(len(pdfs)))
         self.window.output_file.setText(str(output_dir))
-        self.window.layout_buttons[layout].setChecked(True)
 
     def _start_and_wait(self, timeout=120, window=None):
         window = window or self.window
@@ -141,15 +140,18 @@ class QtGuiSmokeTests(unittest.TestCase):
     def test_batch_input_toggles_the_batch_widgets(self):
         self.window.input_type_buttons["pdfs"].setChecked(True)
         self.window._input_type_changed()
-        self.assertTrue(self.window.layout_row.isVisibleTo(self.window))
         self.assertFalse(self.window.folder_check.isVisibleTo(self.window))
         self.assertEqual(self.window.output_label.text(), "Output folder:")
 
         self.window.input_type_buttons["pdf"].setChecked(True)
         self.window._input_type_changed()
-        self.assertFalse(self.window.layout_row.isVisibleTo(self.window))
         self.assertTrue(self.window.folder_check.isVisibleTo(self.window))
         self.assertEqual(self.window.output_label.text(), "Transcript:")
+
+    def test_there_is_no_batch_layout_chooser(self):
+        """Batch output is always one folder per PDF, so there is nothing to group."""
+        self.assertFalse(hasattr(self.window, "layout_buttons"))
+        self.assertFalse(hasattr(self.window, "layout_row"))
 
     def test_single_pdf_writes_markdown_and_finishes_clean(self):
         pdf = self._text_pdf()
@@ -228,37 +230,37 @@ class QtGuiSmokeTests(unittest.TestCase):
         self.window._input_type_changed()
         self.assertTrue(self.window.same_dir_check.isVisibleTo(self.window))
 
-    def test_batch_by_type_layout_places_markdown_and_pagemap(self):
+    def test_batch_writes_one_folder_per_pdf(self):
         pdfs = [self._text_pdf("first.pdf"), self._text_pdf("second.pdf")]
-        self._select_batch(pdfs, self.root / "out", layout=gui.BY_TYPE)
+        self._select_batch(pdfs, self.root / "out")
 
         self._start_and_wait()
 
         self.assertEqual(self.window.status_label.text(), "Done")
-        self.assertTrue((self.root / "out" / "markdown" / "first.md").is_file())
-        self.assertTrue((self.root / "out" / "markdown" / "second.md").is_file())
-        self.assertTrue(
-            (self.root / "out" / "pagemaps" / "first.pagemap.json").is_file()
-        )
-        self.assertTrue(
-            (self.root / "out" / "pagemaps" / "second.pagemap.json").is_file()
-        )
+        self.assertTrue((self.root / "out" / "first" / "transcript.md").is_file())
+        self.assertTrue((self.root / "out" / "second" / "transcript.md").is_file())
         self.assertIn("PDFs succeeded: 2/2", self.window.log.toPlainText())
 
-    def test_batch_per_pdf_layout_uses_one_folder_per_document(self):
-        pdfs = [self._text_pdf("paper.pdf")]
-        self._select_batch(pdfs, self.root / "out", layout=gui.PER_PDF)
+    def test_no_pagemap_sidecar_is_left_behind(self):
+        pdfs = [self._text_pdf("first.pdf"), self._text_pdf("second.pdf")]
+        self._select_batch(pdfs, self.root / "out")
 
         self._start_and_wait()
 
-        self.assertTrue((self.root / "out" / "paper" / "transcript.md").is_file())
-        self.assertTrue(
-            (self.root / "out" / "paper" / "transcript.pagemap.json").is_file()
-        )
+        self.assertEqual(list((self.root / "out").rglob("*.pagemap.json")), [])
+
+    def test_a_single_pdf_run_leaves_no_pagemap_sidecar(self):
+        pdf = self._text_pdf()
+        self._select_single_pdf(pdf, self.root / "single")
+
+        self._start_and_wait()
+
+        self.assertTrue((self.root / "single.md").is_file())
+        self.assertEqual(list(self.root.glob("*.pagemap.json")), [])
 
     def test_batch_keeps_going_when_one_document_fails(self):
         pdfs = [self._textless_pdf(), self._text_pdf()]
-        self._select_batch(pdfs, self.root / "out", layout=gui.BY_TYPE)
+        self._select_batch(pdfs, self.root / "out")
 
         with patch.object(QMessageBox, "critical") as critical:
             self._start_and_wait()
@@ -269,8 +271,8 @@ class QtGuiSmokeTests(unittest.TestCase):
         self.assertIn("PDFs succeeded: 1/2", log)
         # A per-document failure is logged, not fatal.
         critical.assert_not_called()
-        self.assertTrue((self.root / "out" / "markdown" / "paper.md").is_file())
-        self.assertFalse((self.root / "out" / "markdown" / "scanned.md").exists())
+        self.assertTrue((self.root / "out" / "paper" / "transcript.md").is_file())
+        self.assertFalse((self.root / "out" / "scanned").exists())
 
     def test_start_without_input_warns_and_does_not_start(self):
         self.window.input_type_buttons["pdf"].setChecked(True)
@@ -423,7 +425,6 @@ class QtGuiSmokeTests(unittest.TestCase):
             "input_type": "pdfs",
             "pdf_paths": [str(pdf)],
             "output_file": str(self.root / "out"),
-            "batch_layout": gui.BY_TYPE,
         })
 
         restored = self._restart()
@@ -432,7 +433,6 @@ class QtGuiSmokeTests(unittest.TestCase):
         self.assertEqual(restored.pdf_paths, [pdf])
         self.assertEqual(restored.input_path.text(), "1 PDF file selected")
         self.assertEqual(restored.output_file.text(), str(self.root / "out"))
-        self.assertTrue(restored.layout_buttons[gui.BY_TYPE].isChecked())
         self.assertFalse(restored.same_dir_check.isVisibleTo(restored))
 
     def test_stale_batch_pdfs_are_dropped_on_restore(self):
@@ -480,6 +480,7 @@ class QtGuiSmokeTests(unittest.TestCase):
             "workers": -5,
             "formats": ["docx"],
             "output_file": 42,
+            "batch_layout": "by_type",  # written by older versions
         })
 
         restored = self._restart()
