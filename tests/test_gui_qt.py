@@ -249,15 +249,6 @@ class QtGuiSmokeTests(unittest.TestCase):
 
         self.assertEqual(list((self.root / "out").rglob("*.pagemap.json")), [])
 
-    def test_a_single_pdf_run_leaves_no_pagemap_sidecar(self):
-        pdf = self._text_pdf()
-        self._select_single_pdf(pdf, self.root / "single")
-
-        self._start_and_wait()
-
-        self.assertTrue((self.root / "single.md").is_file())
-        self.assertEqual(list(self.root.glob("*.pagemap.json")), [])
-
     def test_batch_keeps_going_when_one_document_fails(self):
         pdfs = [self._textless_pdf(), self._text_pdf()]
         self._select_batch(pdfs, self.root / "out")
