@@ -18,7 +18,7 @@ Batch OCR extraction wrapping 4 engines: [Reza2kn/Bina-0.1](https://huggingface.
 - **Qt GUI (PySide6)** 🖥️ — file pickers, format checkboxes, batch layout selector, progress bar, live log, engine + GPU/CPU/DPI/workers/direction selectors (launches by default with no args); OCR runs on a worker thread and reports back through Qt signals
 - **CLI mode** ⌨️ — for scripting and batch runs
 - **CPU fallback** 💻 — `--cpu` flag, or GPU/CPU selector in the GUI
-- **Modular code** 🧱 — split into `model.py`, `pages.py`, `ocr.py`, `inspector.py`, `windows_ocr.py`, `chrome_ocr_engine.py`, `normalize.py`, `transcriber.py` (one place that wires up every engine, shared by the CLI and the GUI), `pdf_batch.py`, `pdf_pipeline.py`, `gui.py` around the `main.py` entry point
+- **Modular code** 🧱 — split into `model.py`, `pages.py`, `ocr.py`, `inspector.py`, `windows_ocr.py`, `chrome_ocr_engine.py`, `normalize.py`, `transcriber.py` (one place that wires up every engine, shared by the CLI and the GUI), `pdf_batch.py`, `pdf_pipeline.py`, `settings_store.py`, `gui.py` around the `main.py` entry point
 - **Model check before download** 📥 — shows cache status and repo size, asks before downloading
 
 ## Requirements 🛠️
@@ -47,6 +47,14 @@ pip install -r requirements.txt
 ```bash
 python main.py
 ```
+
+The GUI remembers the last form — input, output name, formats, engine, device,
+DPI, workers, direction, normalization, and the folder options — and restores it
+on the next launch. It is saved when a run starts and when the window closes, to
+`%APPDATA%\OCR-Wrapper\settings.json` (`~/Library/Application Support/` on macOS,
+`$XDG_CONFIG_HOME` on Linux); set `OCR_WRAPPER_CONFIG_DIR` to keep it elsewhere.
+A missing or damaged file just means the defaults. A remembered batch selection
+is re-checked on restore, so PDFs you have since deleted are dropped from it.
 
 ### CLI — PDF 📄
 
@@ -225,6 +233,7 @@ python -c "from windows_ocr import get_ocr_engine; get_ocr_engine(); print('oneo
 - Expect minutes/page on low-end GPUs; ~10-30s/page on a proper GPU
 - `torch.cuda.empty_cache()` runs every 10 pages for low-VRAM GPUs
 - Stop button (GUI) / Ctrl-C (CLI) stops after the current page
+- The GUI's saved settings live outside the project (`%APPDATA%\OCR-Wrapper\settings.json` on Windows), so they survive a re-clone; delete that file to get the defaults back
 - The GUI is PySide6 (Qt), installed by `requirements.txt`. On a headless Linux box it also needs the usual Qt X11 runtime libs (`libxcb-*`); without a display, use the CLI instead
 
 ## License 📄
