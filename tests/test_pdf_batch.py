@@ -62,9 +62,9 @@ class PDFBatchTests(unittest.TestCase):
 
         folder = job.output_base.parent.name
         self.assertLess(len(folder), len(pdf.stem))
-        self.assertNotIn("/", folder)
+        self.assertRegex(folder, r"-[0-9a-f]{8}$")
 
-    def test_the_longest_generated_file_stays_within_the_windows_limit(self):
+    def test_generated_paths_fit_the_windows_limit(self):
         pdf = self._pdf("long-paper-title-" * 12 + ".pdf")
 
         [job] = create_jobs([pdf], self.root / "output")
