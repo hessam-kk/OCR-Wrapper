@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import settings_store
 from model import MODEL_ID
 from ocr import FORMATS, run_ocr_pages, write_outputs
 from pages import get_page_images
@@ -44,6 +45,11 @@ from transcriber import build_transcriber, uses_page_transcriber
 
 DPI_CHOICES = ("150", "200", "300", "400")
 PDF_FILTER = "PDF files (*.pdf);;All files (*)"
+
+
+def _pdf_count_label(count):
+    """Label for the read-only input field when several PDFs are selected."""
+    return f"{count} PDF file{'s' if count != 1 else ''} selected"
 
 
 def _radio_value(buttons, default):
@@ -313,7 +319,7 @@ class OCRApp(QMainWindow):
         self.timer.setInterval(1000)
         self.timer.timeout.connect(self._tick_timer)
 
-        self._input_type_changed()
+        self._restore_settings()
 
     # --- UI construction ---
 
@@ -604,7 +610,7 @@ class OCRApp(QMainWindow):
             paths, _ = QFileDialog.getOpenFileNames(self, "Select PDF files", "", PDF_FILTER)
             if paths:
                 self.pdf_paths = [Path(path) for path in paths]
-                self.input_path.setText(f"{len(paths)} PDF files selected")
+                self.input_path.setText(_pdf_count_label(len(paths)))
                 self.output_file.setText(str(self.pdf_paths[0].parent / "transcripts"))
             return
         else:
@@ -627,6 +633,115 @@ class OCRApp(QMainWindow):
         if path:
             self.output_file.setText(Path(path).stem)
 
+    # --- settings persistence ---
+
+    def _settings_payload(self):
+        """Form values worth remembering.
+
+        Raw widget state, not the derived output path, so restoring does not
+        apply the folder options a second time.
+        """
+        return {
+            "input_type": self._input_type(),
+            "input_path": self.input_path.text().strip(),
+            "pdf_paths": [str(path) for path in self.pdf_paths],
+            "output_file": self.output_file.text().strip(),
+            "folder_check": self.folder_check.isChecked(),
+            "same_dir_check": self.same_dir_check.isChecked(),
+            "skip_ocr": self.skip_ocr_check.isChecked(),
+            "formats": [fmt for fmt, box in self.format_boxes.items() if box.isChecked()],
+            "batch_layout": _radio_value(self.layout_buttons, PER_PDF),
+            "engine": _radio_value(self.engine_buttons, "chrome"),
+            "device": _radio_value(self.device_buttons, "cuda"),
+            "direction": _radio_value(self.direction_buttons, "rtl"),
+            "normalize": self.normalize_check.isChecked(),
+            "max_tokens": self.max_tokens.value(),
+            "page_limit": self.page_limit.value(),
+            "dpi": self.dpi_box.currentText(),
+            "workers": self.workers.value(),
+        }
+
+    def _save_settings(self):
+        try:
+            settings_store.save(self._settings_payload())
+        except OSError as error:
+            # Forgetting the form is not worth blocking the run or the exit.
+            self._log(f"[WARN] Could not save settings: {error}")
+
+    def _restore_settings(self):
+        """Apply the saved form, falling back to the defaults for anything odd.
+
+        Unknown or malformed values are skipped, so a settings file written by
+        an older version can never leave the form in an impossible state.
+        """
+        payload = settings_store.load()
+        if payload.get("input_type") in self.input_type_buttons:
+            self.input_type_buttons[payload["input_type"]].setChecked(True)
+        # _input_type_changed() clears the path fields, so the remembered input
+        # is restored after it has run.
+        self._input_type_changed()
+
+        for key, buttons in (
+            ("engine", self.engine_buttons),
+            ("device", self.device_buttons),
+            ("direction", self.direction_buttons),
+            ("batch_layout", self.layout_buttons),
+        ):
+            if payload.get(key) in buttons:
+                buttons[payload[key]].setChecked(True)
+
+        for key, widget in (
+            ("folder_check", self.folder_check),
+            ("same_dir_check", self.same_dir_check),
+            ("skip_ocr", self.skip_ocr_check),
+            ("normalize", self.normalize_check),
+        ):
+            if isinstance(payload.get(key), bool):
+                widget.setChecked(payload[key])
+
+        formats = payload.get("formats")
+        if isinstance(formats, list):
+            wanted = [fmt for fmt in formats if fmt in self.format_boxes]
+            # Never restore an empty selection: Start would refuse to run.
+            if wanted:
+                for fmt, box in self.format_boxes.items():
+                    box.setChecked(fmt in wanted)
+
+        for key, widget in (
+            ("max_tokens", self.max_tokens),
+            ("page_limit", self.page_limit),
+            ("workers", self.workers),
+        ):
+            value = payload.get(key)
+            if isinstance(value, int) and not isinstance(value, bool):
+                widget.setValue(value)  # QSpinBox clamps to its own range
+        if payload.get("dpi") in DPI_CHOICES:
+            self.dpi_box.setCurrentText(payload["dpi"])
+
+        if isinstance(payload.get("output_file"), str) and payload["output_file"]:
+            self.output_file.setText(payload["output_file"])
+        self._restore_input_path(payload)
+
+    def _restore_input_path(self, payload):
+        saved_pdfs = payload.get("pdf_paths")
+        if isinstance(saved_pdfs, list):
+            names = [value for value in saved_pdfs if isinstance(value, str)]
+            # A remembered input may have moved or been renamed since last run.
+            self.pdf_paths = [Path(name) for name in names if Path(name).is_file()]
+            dropped = len(names) - len(self.pdf_paths)
+            if dropped > 0:
+                self._log(f"[INFO] Skipped {dropped} saved PDF(s) that no longer exist.")
+
+        if self._input_type() == "pdfs" and self.pdf_paths:
+            self.input_path.setText(_pdf_count_label(len(self.pdf_paths)))
+        elif isinstance(payload.get("input_path"), str):
+            self.input_path.setText(payload["input_path"])
+
+    def closeEvent(self, event):
+        """Remember the form so the next launch starts where this one left off."""
+        self._save_settings()
+        super().closeEvent(event)
+
     # --- GUI-thread slots ---
 
     def _log(self, message):
@@ -644,6 +759,8 @@ class OCRApp(QMainWindow):
 
     def _on_failed(self, message):
         self.status_label.setText("Error")
+        # Keep the reason in the log too: the dialog is dismissed and gone.
+        self._log(f"[ERROR] {message}")
         QMessageBox.critical(self, "Error", message)
 
     def _on_download_prompt(self, size_gb):
@@ -697,6 +814,7 @@ class OCRApp(QMainWindow):
             )
             return
 
+        self._save_settings()
         self.running = True
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
