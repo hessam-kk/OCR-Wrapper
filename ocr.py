@@ -294,12 +294,16 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
     requested = set(formats)
 
     md_path = output_base.with_suffix(".md")
-    pagemap_path = output_base.with_suffix(".pagemap.json")
+    # Sidecars are legacy: early versions wrote a .pagemap.json next to the .md,
+    # so a re-export of those outputs still recovers its page breaks (and then
+    # removes the file). Runs no longer leave one behind - the outputs are just
+    # the transcript in each requested format.
+    legacy_pagemap_path = output_base.with_suffix(".pagemap.json")
     if texts is None:
         # Re-export from an existing markdown (skip OCR). Paragraph boundaries
         # are recovered from the file's blank lines; physical page boundaries
-        # come from the sidecar written on the original OCR run. Without it
-        # (old .md files), no page breaks are inserted.
+        # come from a legacy sidecar when one is there. Without it, no page
+        # breaks are inserted.
         if not md_path.exists():
             raise FileNotFoundError(f"Skip-OCR requested but {md_path.name} does not exist")
         md_body = md_path.read_text(encoding="utf-8")
@@ -309,16 +313,20 @@ def write_outputs(texts, output_base, formats, log=print, direction="rtl", title
         paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
         if not paragraphs:
             paragraphs = [body]
-        if pagemap_path.exists():
-            page_breaks = set(json.loads(pagemap_path.read_text(encoding="utf-8")))
-            pagemap_path.unlink()
+        if legacy_pagemap_path.exists():
+            page_breaks = set(json.loads(legacy_pagemap_path.read_text(encoding="utf-8")))
+            legacy_pagemap_path.unlink()
         else:
             page_breaks = set()
     else:
         paragraphs, page_breaks = _merge_pages(texts)
         body = "\n\n".join(paragraphs).strip() + "\n"
         md_body = body
-        pagemap_path.write_text(json.dumps(sorted(page_breaks)), encoding="utf-8")
+        # A sidecar from an older version describes a transcript that has just
+        # been rewritten, so it is stale as well as unwanted.
+        if legacy_pagemap_path.exists():
+            legacy_pagemap_path.unlink()
+            log(f"Removed stale {legacy_pagemap_path.name}")
     if direction == "rtl" and not md_body.startswith("<div"):
         md_body = '<div dir="rtl">\n\n' + md_body + "</div>\n"
 
