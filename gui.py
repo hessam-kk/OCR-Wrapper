@@ -39,7 +39,7 @@ import settings_store
 from model import MODEL_ID
 from ocr import FORMATS, run_ocr_pages, write_outputs
 from pages import get_page_images
-from pdf_batch import BY_TYPE, PER_PDF, beside_input, create_jobs, place_pagemap
+from pdf_batch import beside_input, create_jobs
 from pdf_pipeline import process_pdf
 from transcriber import build_transcriber, uses_page_transcriber
 
@@ -69,7 +69,6 @@ class OCRSettings:
     pdf_paths: list[Path]
     output_base: Path
     output_dir: str
-    batch_layout: str
     formats: list[str]
     direction: str
     engine: str
@@ -221,7 +220,7 @@ class OCRWorker(QObject):
 
     def _run_pdf_batch(self):
         settings = self.settings
-        jobs = create_jobs(settings.pdf_paths, settings.output_dir, settings.batch_layout)
+        jobs = create_jobs(settings.pdf_paths, settings.output_dir)
         if uses_page_transcriber(settings.engine):
             transcribe = self._transcriber()
             if transcribe is None:
@@ -246,7 +245,6 @@ class OCRWorker(QObject):
                     progress=self._page_progress(index, len(jobs)),
                     should_stop=self._should_stop,
                 )
-                place_pagemap(job)
             except Exception as error:
                 failures.append(job.input_path)
                 self.log.emit(f"[ERROR] {job.input_path.name}: {error}")
@@ -402,21 +400,6 @@ class OCRApp(QMainWindow):
         formats_row.addStretch(1)
         grid.addLayout(formats_row, 3, 1, 1, 2)
 
-        self.layout_row = QWidget()
-        layout_row = QHBoxLayout(self.layout_row)
-        layout_row.setContentsMargins(0, 0, 0, 0)
-        layout_row.addWidget(QLabel("Batch layout:"))
-        self.layout_buttons = {
-            PER_PDF: QRadioButton("One folder per PDF"),
-            BY_TYPE: QRadioButton("Group into markdown/ and pagemaps/"),
-        }
-        self.layout_group = self._exclusive(self.layout_buttons)
-        self.layout_buttons[PER_PDF].setChecked(True)
-        for button in self.layout_buttons.values():
-            layout_row.addWidget(button)
-        layout_row.addStretch(1)
-        grid.addWidget(self.layout_row, 4, 0, 1, 3)
-
         grid.setColumnStretch(1, 1)
         return box
 
@@ -568,7 +551,6 @@ class OCRApp(QMainWindow):
             pdf_paths=list(self.pdf_paths),
             output_base=self._output_base(),
             output_dir=self.output_file.text().strip() or "transcripts",
-            batch_layout=_radio_value(self.layout_buttons, PER_PDF),
             formats=[fmt for fmt, box in self.format_boxes.items() if box.isChecked()],
             direction=_radio_value(self.direction_buttons, "rtl"),
             engine=_radio_value(self.engine_buttons, "chrome"),
@@ -595,12 +577,10 @@ class OCRApp(QMainWindow):
             # is ambiguous there - the output folder picker covers it.
             self.same_dir_check.setVisible(False)
             self.skip_ocr_check.setVisible(False)
-            self.layout_row.setVisible(True)
         else:
             self.folder_check.setVisible(True)
             self.same_dir_check.setVisible(True)
             self.skip_ocr_check.setVisible(True)
-            self.layout_row.setVisible(False)
 
     def _browse_input(self):
         input_type = self._input_type()
@@ -650,7 +630,6 @@ class OCRApp(QMainWindow):
             "same_dir_check": self.same_dir_check.isChecked(),
             "skip_ocr": self.skip_ocr_check.isChecked(),
             "formats": [fmt for fmt, box in self.format_boxes.items() if box.isChecked()],
-            "batch_layout": _radio_value(self.layout_buttons, PER_PDF),
             "engine": _radio_value(self.engine_buttons, "chrome"),
             "device": _radio_value(self.device_buttons, "cuda"),
             "direction": _radio_value(self.direction_buttons, "rtl"),
@@ -685,7 +664,6 @@ class OCRApp(QMainWindow):
             ("engine", self.engine_buttons),
             ("device", self.device_buttons),
             ("direction", self.direction_buttons),
-            ("batch_layout", self.layout_buttons),
         ):
             if payload.get(key) in buttons:
                 buttons[payload[key]].setChecked(True)
