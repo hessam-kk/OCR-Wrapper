@@ -10,12 +10,12 @@ Batch OCR extraction wrapping 4 engines: [Reza2kn/Bina-0.1](https://huggingface.
 - **Image folder input** 🖼️ — processes sorted image files (jpg, png, webp, bmp, tif, etc.)
 - **Four engines** ⚙️ — `bina` (vision-model OCR, handles scanned/images), `pdf-inspector` (instant text extraction for text-based PDFs), `oneocr` (Windows Snipping Tool OCR), or `chrome` (Chrome/Edge Screen AI OCR)
 - **Multi-format export** 📦 — Markdown, plain text, and ebooks (`md` `txt` `epub` `pdf` `azw3`; `epub`/`pdf`/`azw3` go through calibre's `ebook-convert`)
-- **Clean continuous output** 🧩 — paragraphs are stitched across page boundaries so an OCR-split sentence doesn't break the reading flow; a `.pagemap.json` sidecar records real page breaks
+- **Clean continuous output** 🧩 — paragraphs are stitched across page boundaries so an OCR-split sentence doesn't break the reading flow, and nothing but the transcript is left in the output folder
 - **Persian normalization** 🇮🇷 — optional hazm post-processing that reinserts half-spaces (ZWNJ) and unifies glyphs/digits, which OCR models often drop
 - **Kindle-ready Persian** 📖 — ebook outputs pre-shape Arabic-script runs into joined presentation forms (via arabic-reshaper) so Kindle e-ink renders the script correctly
 - **Parallel workers** 🚀 — optionally OCR pages concurrently (threads; the chrome engine uses processes since its DLL isn't thread-safe)
 - **Skip OCR** ⏭️ — re-export an existing transcript to other formats without re-running the model
-- **Qt GUI (PySide6)** 🖥️ — file pickers, format checkboxes, batch layout selector, progress bar, live log, engine + GPU/CPU/DPI/workers/direction selectors (launches by default with no args); OCR runs on a worker thread and reports back through Qt signals
+- **Qt GUI (PySide6)** 🖥️ — file pickers, format checkboxes, progress bar, live log, engine + GPU/CPU/DPI/workers/direction selectors (launches by default with no args); OCR runs on a worker thread and reports back through Qt signals
 - **CLI mode** ⌨️ — for scripting and batch runs
 - **CPU fallback** 💻 — `--cpu` flag, or GPU/CPU selector in the GUI
 - **Modular code** 🧱 — split into `model.py`, `pages.py`, `ocr.py`, `inspector.py`, `windows_ocr.py`, `chrome_ocr_engine.py`, `normalize.py`, `transcriber.py` (one place that wires up every engine, shared by the CLI and the GUI), `pdf_batch.py`, `pdf_pipeline.py`, `settings_store.py`, `gui.py` around the `main.py` entry point
@@ -80,10 +80,13 @@ Process several selected PDFs with the same settings:
 python main.py --pdfs paper-one.pdf paper-two.pdf --engine inspector --direction ltr --output_dir transcripts
 ```
 
-Batch mode offers two output layouts:
+Batch mode writes one short-named folder per PDF, containing the transcript in
+each requested format:
 
-- `per_pdf` (default): one short-named folder per PDF containing `transcript.md` and `transcript.pagemap.json`
-- `by_type`: all Markdown files under `markdown/` and all page-map files under `pagemaps/`
+```
+transcripts/paper/transcript.md
+transcripts/another-book/transcript.md
+```
 
 Long PDF names are shortened with a stable hash so the generated files remain
 openable by Windows applications that enforce the legacy path-length limit.
@@ -141,8 +144,7 @@ python main.py --skip-ocr --output_file transcript --formats epub azw3
 | `--input_dir` | — | Folder of page images |
 | `--output_file` | `book_transcript` | Output base name (extension added per format) |
 | `--same_dir` | off | Write outputs next to the input (beside the PDF, or inside the image folder) |
-| `--output_dir` | `transcripts` | Root output folder for `--pdfs` |
-| `--batch_layout` | `per_pdf` | Batch layout: `per_pdf` or `by_type` |
+| `--output_dir` | `transcripts` | Root output folder for `--pdfs` (one subfolder per PDF) |
 | `--formats` | `md` | Output formats: `md` `txt` `epub` `pdf` `azw3` (ebook formats need calibre) |
 | `--direction` | `rtl` | Text direction of the exported output (`rtl`/`ltr`) |
 | `--max_new_tokens` | `1024` | Max tokens generated per page (bina) |
@@ -158,9 +160,8 @@ python main.py --skip-ocr --output_file transcript --formats epub azw3
 
 - **Markdown** 📄 — a clean continuous document with paragraphs merged across page boundaries (no `## Page N` markers), wrapped in `<div dir="rtl">` for renderers
 - **Formats** 🗂️ — `md`/`txt` are written directly; `epub`/`pdf`/`azw3` are produced via calibre (`ebook-convert`)
-- **Sidecar** 🗺️ — a `.pagemap.json` file records real page-break indices so re-exports via `--skip-ocr` keep the page structure
+- **No sidecar files** 🧹 — the output folder holds only the transcript in each requested format; `--skip-ocr` still honours a `.pagemap.json` left by an older run (so those page breaks survive the re-export) and then deletes it
 - **Next to the input** 📁 — `--same_dir` (GUI: “Save next to input”) writes the transcript beside the source PDF, or inside the image folder, instead of the working directory; with “Save in folder” the transcript folder is created there
-- For `pdf-inspector`, `[0]` is a normal page-map value: the whole PDF was extracted as one document block beginning at paragraph zero
 - **Kindle** 📖 — `epub`/`azw3` output is pre-shaped Arabic-script Persian for e-ink; the `.md`/`.txt` stay canonical and searchable
 
 ### Sample result (page 1 of «۱» , RTL Persian) 🎯
