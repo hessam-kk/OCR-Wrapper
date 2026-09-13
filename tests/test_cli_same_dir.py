@@ -55,7 +55,7 @@ class SameDirCliTests(unittest.TestCase):
         # Without the flag a bare --output_file would land in the working dir.
         self.assertFalse((Path.cwd() / "transcript.md").exists())
 
-    def test_same_dir_points_the_pagemap_at_the_same_directory(self):
+    def test_same_dir_leaves_no_pagemap_sidecar(self):
         pdf = self._text_pdf()
 
         self._run_cli(
@@ -63,7 +63,44 @@ class SameDirCliTests(unittest.TestCase):
             "--output_file", "transcript", "--same_dir",
         )
 
-        self.assertTrue((self.root / "transcript.pagemap.json").is_file())
+        self.assertTrue((self.root / "transcript.md").is_file())
+        self.assertEqual(list(self.root.glob("*.pagemap.json")), [])
+
+    def test_a_stale_pagemap_sidecar_is_cleaned_up(self):
+        pdf = self._text_pdf()
+        stale = self.root / "transcript.pagemap.json"
+        stale.write_text("[0, 2]", encoding="utf-8")
+
+        self._run_cli(
+            "--pdf", str(pdf), "--engine", "inspector", "--direction", "ltr",
+            "--output_file", "transcript", "--same_dir",
+        )
+
+        self.assertTrue((self.root / "transcript.md").is_file())
+        self.assertFalse(stale.exists())
+
+    def test_a_pdf_batch_leaves_no_pagemap_sidecar(self):
+        pdf = self._text_pdf()
+
+        code = self._run_cli(
+            "--pdfs", str(pdf), "--engine", "inspector", "--direction", "ltr",
+            "--output_dir", str(self.root / "out"),
+        )
+
+        self.assertEqual(code, 0)
+        self.assertTrue((self.root / "out" / "paper" / "transcript.md").is_file())
+        self.assertEqual(list((self.root / "out").rglob("*.pagemap.json")), [])
+
+    def test_the_batch_layout_flag_is_gone(self):
+        pdf = self._text_pdf()
+
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as raised:
+                self._run_cli(
+                    "--pdfs", str(pdf), "--batch_layout", "by_type",
+                )
+
+        self.assertEqual(raised.exception.code, 2)
 
     def test_same_dir_is_rejected_for_multiple_pdfs(self):
         pdf = self._text_pdf()
