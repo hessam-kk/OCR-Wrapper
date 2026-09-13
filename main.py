@@ -15,7 +15,7 @@ from gui import launch_gui
 from model import ENGINES
 from ocr import FORMATS, run_ocr_pages
 from pages import get_page_images
-from pdf_batch import BATCH_LAYOUTS, PER_PDF, beside_input, create_jobs, place_pagemap
+from pdf_batch import beside_input, create_jobs
 from pdf_pipeline import process_pdf
 from transcriber import build_transcriber, uses_page_transcriber
 
@@ -50,7 +50,7 @@ def make_transcriber(args):
 def run_pdf_batch(args, parser):
     if args.skip_ocr:
         parser.error("--skip-ocr is not supported with --pdfs")
-    jobs = create_jobs((Path(path) for path in args.pdfs), args.output_dir, args.batch_layout)
+    jobs = create_jobs((Path(path) for path in args.pdfs), args.output_dir)
     transcribe = make_transcriber(args)
     if transcribe is None and uses_page_transcriber(args.engine):
         return 1
@@ -64,7 +64,6 @@ def run_pdf_batch(args, parser):
                 args.engine, transcribe=transcribe, limit=args.limit,
                 workers=args.workers, log=print,
             )
-            place_pagemap(job)
         except Exception as error:
             failures.append(job.input_path)
             print(f"[ERROR] {job.input_path.name}: {error}")
@@ -82,9 +81,8 @@ def main():
     parser.add_argument("--output_file", default="book_transcript", help="Transcript output base name (extension added per format)")
     parser.add_argument("--same_dir", action="store_true",
                         help="Write outputs next to the input: beside the PDF, or inside the image folder")
-    parser.add_argument("--output_dir", default="transcripts", help="Output folder for --pdfs")
-    parser.add_argument("--batch_layout", choices=BATCH_LAYOUTS, default=PER_PDF,
-                        help="Batch output layout: per_pdf or by_type")
+    parser.add_argument("--output_dir", default="transcripts",
+                        help="Output folder for --pdfs (one subfolder per PDF)")
     parser.add_argument("--formats", nargs="+", choices=FORMATS, default=["md"], help="Output formats to write (md txt epub pdf azw3; epub/pdf/azw3 need calibre)")
     parser.add_argument("--max_new_tokens", type=int, default=1024, help="Max tokens generated per page")
     parser.add_argument("--limit", type=int, default=None, help="Only process the first N pages")
